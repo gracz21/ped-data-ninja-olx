@@ -1,4 +1,5 @@
 import java.util
+import java.util.Properties
 
 import org.apache.log4j.{Level, Logger}
 import org.apache.spark.sql.SparkSession
@@ -8,7 +9,7 @@ import scala.collection.{JavaConversions, mutable}
 
 case class AdvertisementAndBagOfWords(advertisementId: Long, bagOfWordsId: Long)
 
-case class Advertisement(id: Long, category1: Long, category2: Long, category3: Option[Long])
+case class Advertisement(id: Long)
 
 case class BagOfWords(id: Long, word: String)
 
@@ -51,7 +52,7 @@ object Main extends java.io.Serializable {
                 .flatMap(
                     advertisementTmp => advertisementTmp.words.map(
                         word => AdvertisementAndBagOfWords(
-                            advertisementTmp.id, bagOfWords.find(bagOfWords => bagOfWords.word == word).get.id
+                            advertisementTmp.id, bagOfWords.find(item => item.word == word).get.id
                         )
                     )
                 )
@@ -60,7 +61,7 @@ object Main extends java.io.Serializable {
         //
         val advertisementDS = trainingRDD.map(string => string.split("\t"))
                 .map(
-                    stringArray => Advertisement(stringArray(0).toLong, stringArray(4).toLong, stringArray(5).toLong, if (stringArray.length == 7) Option(stringArray(6).toLong) else None)
+                    stringArray => Advertisement(stringArray(0).toLong)
                 )
                 .toDS()
         //
@@ -68,8 +69,14 @@ object Main extends java.io.Serializable {
         advertisementBagOfWordsDS.createOrReplaceTempView("advertisement_bag_of_words")
         advertisementDS.createOrReplaceTempView("advertisement")
 
-        sqlContext.sql("SELECT DISTINCT COUNT(1) FROM bag_of_words").show()
-        sqlContext.sql("SELECT word FROM bag_of_words").show()
+        Class.forName("org.postgresql.Driver")
+        val connectionProperties = new Properties()
+        connectionProperties.put("user", "postgres")
+        connectionProperties.put("password", "postgres")
+
+        advertisementDS.write.jdbc("jdbc:postgresql://localhost:5432/data_ninja", "public.advertisement", connectionProperties)
+        bagOfWordsDS.write.jdbc("jdbc:postgresql://localhost:5432/data_ninja", "public.bag_of_words", connectionProperties)
+        advertisementBagOfWordsDS.write.jdbc("jdbc:postgresql://localhost:5432/data_ninja", "public.advertisement_bag_of_words", connectionProperties)
     }
 
     // znaczenie http://nkjp.pl/poliqarp/help/plse2.html
