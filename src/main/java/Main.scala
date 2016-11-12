@@ -2,16 +2,14 @@ import java.util
 import java.util.Properties
 
 import org.apache.log4j.{Level, Logger}
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{Dataset, SaveMode, SparkSession}
 import pl.sgjp.morfeusz.{Morfeusz, MorfeuszUsage, MorphInterpretation}
 
 import scala.collection.{JavaConversions, mutable}
 
-case class AdvertisementAndBagOfWords(advertisementId: Long, bagOfWordsId: Long)
+case class Advertisement(id: Long, title: String)
 
-case class Advertisement(id: Long)
-
-case class BagOfWords(id: Long, word: String)
+case class BagOfWords(advertisementId: Long, word: String)
 
 object Main extends java.io.Serializable {
     disableLogging()
@@ -30,30 +28,18 @@ object Main extends java.io.Serializable {
     val stopWords = sc.textFile("data/polish_stop_words.txt").collect()
 
     def main(args: Array[String]): Unit = {
+        //        val trainingRDD = sc.textFile("data/test.tsv")
         val trainingRDD = sc.textFile("data/training.[0-9]*.tsv")
 
         //
-        var i = 0
-        val bagOfWordsDS = trainingRDD.map(string => string.split("\t"))
-                .map(stringArray => processTitle(stringArray(1)))
-                .flatMap(words => words)
-                .map(word => {
-                    i += 1
-                    BagOfWords(i, word)
-                })
-                .toDS()
-                .dropDuplicates("word")
-        val bagOfWords = bagOfWordsDS.collect()
-
-        //
         case class AdvertisementTmp(id: Long, words: Array[String])
-        val advertisementBagOfWordsDS = trainingRDD.map(string => string.split("\t"))
-                .map(stringArray => AdvertisementTmp(stringArray(0).toLong, processTitle(stringArray(1))))
+        val bagOfWordsDS = trainingRDD.map(string => string.split("\t"))
+                .map(stringArray =>
+                    AdvertisementTmp(stringArray(0).toLong, processTitle(stringArray(1)))
+                )
                 .flatMap(
                     advertisementTmp => advertisementTmp.words.map(
-                        word => AdvertisementAndBagOfWords(
-                            advertisementTmp.id, bagOfWords.find(item => item.word == word).get.id
-                        )
+                        word => BagOfWords(advertisementTmp.id, word)
                     )
                 )
                 .toDS()
@@ -61,22 +47,23 @@ object Main extends java.io.Serializable {
         //
         val advertisementDS = trainingRDD.map(string => string.split("\t"))
                 .map(
-                    stringArray => Advertisement(stringArray(0).toLong)
+                    stringArray => Advertisement(stringArray(0).toLong, stringArray(1))
                 )
                 .toDS()
         //
         bagOfWordsDS.createOrReplaceTempView("bag_of_words")
-        advertisementBagOfWordsDS.createOrReplaceTempView("advertisement_bag_of_words")
         advertisementDS.createOrReplaceTempView("advertisement")
 
-        Class.forName("org.postgresql.Driver")
-        val connectionProperties = new Properties()
-        connectionProperties.put("user", "postgres")
-        connectionProperties.put("password", "postgres")
+        // 5 zadanie
+        val liczbaCech = sqlContext.sql("SELECT COUNT(1) AS LiczbaCech FROM (SELECT DISTINCT word FROM bag_of_words)")
+                .collect()(0).getLong(0)
+        println(s"Liczba cech: $liczbaCech")
 
-        advertisementDS.write.jdbc("jdbc:postgresql://localhost:5432/data_ninja", "public.advertisement", connectionProperties)
-        bagOfWordsDS.write.jdbc("jdbc:postgresql://localhost:5432/data_ninja", "public.bag_of_words", connectionProperties)
-        advertisementBagOfWordsDS.write.jdbc("jdbc:postgresql://localhost:5432/data_ninja", "public.advertisement_bag_of_words", connectionProperties)
+        val gestosc = sqlContext.sql(s"SELECT AVG(gestosc) FROM (SELECT advertisementId, COUNT(1)/$liczbaCech AS gestosc FROM bag_of_words GROUP BY advertisementId)")
+                .collect()(0).getDouble(0)
+        println(f"Gestosc zbioru: $gestosc%.6f")
+
+//        saveInDatabase(bagOfWordsDS, advertisementDS)
     }
 
     // znaczenie http://nkjp.pl/poliqarp/help/plse2.html
@@ -96,15 +83,16 @@ object Main extends java.io.Serializable {
     // brev - 97, 801
     // TODO moze przyslowki i przymiotniki tez wypierdolic?
     def processTitle(title: String): Array[String] = {
+        var result: util.List[MorphInterpretation] = null
         this.synchronized {
-            val result = morfeusz.analyseAsList(title)
-
-            val withoutTags = removeByTags(result)
-
-            val withoutStopWords = withoutTags.filter(res => !stopWords.contains(res.getOrth))
-
-            getFirstLemmaFromEveryNode(withoutStopWords)
+            result = morfeusz.analyseAsList(title)
         }
+
+        val withoutTags = removeByTags(result)
+
+        val withoutStopWords = withoutTags.filter(res => !stopWords.contains(res.getOrth))
+
+        getFirstLemmaFromEveryNode(withoutStopWords)
     }
 
     def removeByTags(result: util.List[MorphInterpretation]): mutable.Buffer[MorphInterpretation] = {
@@ -140,6 +128,18 @@ object Main extends java.io.Serializable {
         })
 
         lemmas.values.toArray
+    }
+
+    def saveInDatabase(bagOfWordsDS: Dataset[BagOfWords], advertisementDS: Dataset[Advertisement]): Unit = {
+        //        Class.forName("org.postgresql.Driver")
+        //        val connectionProperties = new Properties()
+        //        connectionProperties.put("user", "postgres")
+        //        connectionProperties.put("password", "postgres")
+
+        Class.forName("org.sqlite.JDBC")
+
+        advertisementDS.write.mode(SaveMode.Append).jdbc("jdbc:sqlite:data_ninja.db", "advertisement", new Properties())
+        //        bagOfWordsDS.write.jdbc("jdbc:postgresql://localhost:5432/data_ninja", "public.bag_of_words", connectionProperties)
     }
 
     def disableLogging(): Unit = {
