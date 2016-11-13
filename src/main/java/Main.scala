@@ -73,21 +73,38 @@ object Main extends java.io.Serializable {
         bagOfWordsDS.createOrReplaceTempView("bag_of_words")
         advertisementDS.createOrReplaceTempView("advertisement")
         categoryDS.createOrReplaceTempView("category")
+        sqlContext.uncacheTable("advertisement")
+        sqlContext.uncacheTable("bag_of_words")
 
         val filteredAdvertisementDS = sqlContext.sql("SELECT * FROM advertisement WHERE id IN(SELECT DISTINCT advertisementId FROM bag_of_words WHERE word IN (SELECT word FROM bag_of_words GROUP BY word ORDER BY COUNT(word) DESC LIMIT 100))")
         filteredAdvertisementDS.createOrReplaceTempView("filtered_advertisement")
+        sqlContext.cacheTable("filtered_advertisement")
+
+        val filteredBagOfWordsDS = sqlContext.sql("SELECT * FROM bag_of_words WHERE advertisementId IN (SELECT id FROM filtered_advertisement)")
+        filteredBagOfWordsDS.createOrReplaceTempView("filtered_bag_of_words")
+        sqlContext.cacheTable("filtered_bag_of_words")
+
+        sqlContext.uncacheTable("advertisement")
+        sqlContext.uncacheTable("bag_of_words")
+
+        sqlContext.sql("SELECT COUNT(1) FROM bag_of_words").show()
+        sqlContext.sql("SELECT COUNT(1) FROM filtered_bag_of_words").show()
+
+        sqlContext.sql("SELECT COUNT(1) FROM advertisement").show()
+        sqlContext.sql("SELECT COUNT(1) FROM filtered_advertisement").show()
+
 
         // odpowiedzi
-//        exercise2_5_1()
+        exercise2_5_1()
     }
 
     def exercise2_5_1(): Unit = {
-        val features = sqlContext.sql("SELECT word, COUNT(word) FROM bag_of_words GROUP BY word ORDER BY COUNT(word) DESC LIMIT 30")
+        val features = sqlContext.sql("SELECT word, COUNT(word) FROM filtered_bag_of_words GROUP BY word ORDER BY COUNT(word) DESC LIMIT 30")
         features.foreach(row => {
             val feature = row.getString(0)
             val numberOfAdvertisements = row.getLong(1)
 
-            val advertisementsDS = sqlContext.sql(s"SELECT category1, category2, category3 FROM bag_of_words JOIN advertisement ON advertisementId=id WHERE word='$feature'")
+            val advertisementsDS = sqlContext.sql(s"SELECT category1, category2, category3 FROM filtered_bag_of_words JOIN filtered_advertisement ON advertisementId=id WHERE word='$feature'")
 
             val categoryCounter: CategoryCounter = new CategoryCounter()
             categoryCounter.add(advertisementsDS.collect())
