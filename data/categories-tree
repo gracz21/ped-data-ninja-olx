@@ -1,0 +1,385 @@
+| [#5] Motoryzacja
+    | [#84] Samochody osobowe
+        | [#181] Alfa Romeo
+        | [#182] Audi
+        | [#183] BMW
+        | [#1353] Cadillac
+        | [#184] Chevrolet
+        | [#185] Chrysler
+        | [#186] Citroen
+        | [#1347] Dacia
+        | [#187] Daewoo
+        | [#1349] Daihatsu
+        | [#1343] Dodge
+        | [#188] Fiat
+        | [#189] Ford
+        | [#190] Honda
+        | [#191] Hyundai
+        | [#1345] Jaguar
+        | [#1221] Jeep
+        | [#192] Kia
+        | [#193] Lancia
+        | [#1219] Land Rover
+        | [#1351] Lexus
+        | [#194] Mazda
+        | [#195] Mercedes-Benz
+        | [#1339] Mini
+        | [#196] Mitsubishi
+        | [#197] Nissan
+        | [#198] Opel
+        | [#199] Peugeot
+        | [#1257] Polonez
+        | [#1341] Porsche
+        | [#200] Renault
+        | [#296] Rover
+        | [#201] Saab
+        | [#202] Seat
+        | [#203] Skoda
+        | [#1337] Smart
+        | [#204] Subaru
+        | [#205] Suzuki
+        | [#206] Toyota
+        | [#207] Volkswagen
+        | [#208] Volvo
+        | [#209] Pozostałe osobowe
+    | [#81] Motocykle i Skutery
+        | [#1365] Chopper - Cruiser
+        | [#1367] Enduro - Funbike
+        | [#1369] Cross
+        | [#1371] Motorower
+        | [#1373] Quad - ATV
+        | [#1375] Skuter
+        | [#1377] Sportowy
+        | [#1379] Szosowo - Turystyczny
+        | [#1381] Pozostałe Motocykle i Skutery
+    | [#85] Dostawcze i Ciężarowe
+        | [#1355] Autobusy
+        | [#1357] Dostawcze
+        | [#1359] Ciężarowe
+        | [#1361] Naczepy
+        | [#1255] Pozostałe Dostawcze i Ciężarowe
+    | [#1333] Przyczepy i Pojazdy użytkowe
+        | [#1391] Kempingowe
+        | [#1393] Przyczepy towarowe
+        | [#1395] Wózki widłowe
+        | [#1397] Pozostałe Przyczepy i Pojazdy użytkowe
+    | [#82] Części samochodowe
+        | [#1399] Osobowe
+        | [#1465] Samochody na części
+        | [#1401] Dostawcze i Ciężarowe
+        | [#1403] Pozostałe
+    | [#1335] Części motocyklowe
+    | [#658] Opony i Felgi
+        | [#1383] Opony
+        | [#1385] Felgi
+        | [#1387] Koła
+        | [#1389] Pozostałe Opony i Felgi
+    | [#1461] Sprzęt car audio
+    | [#80] Pozostała motoryzacja
+| [#3] Nieruchomości
+    | [#1307] Mieszkania
+        | [#15] Wynajem
+        | [#14] Sprzedaż
+        | [#16] Zamiana
+    | [#1309] Domy
+        | [#20] Wynajem
+        | [#18] Sprzedaż
+        | [#22] Zamiana
+    | [#709] Działki
+        | [#25] Wynajem
+        | [#24] Sprzedaż
+        | [#1311] Zamiana
+    | [#710] Biura i Lokale
+        | [#127] Wynajem
+        | [#125] Sprzedaż
+        | [#1405] Zamiana
+    | [#124] Garaże i Parkingi
+        | [#1313] Wynajem
+        | [#1315] Sprzedaż
+        | [#1317] Zamiana
+    | [#1289] Noclegi
+    | [#11] Stancje i Pokoje
+    | [#1321] Hale i Magazyny
+        | [#1331] Wynajem
+        | [#1329] Sprzedaż
+    | [#32] Pozostałe nieruchomości
+        | [#1325] Wynajem
+        | [#1323] Sprzedaż
+        | [#1327] Zamiana
+| [#4] Praca
+    | [#53] Edukacja
+    | [#56] IT / telekomunikacja
+    | [#62] Przedstawiciel handlowy
+    | [#64] Kierowca / kurier
+    | [#111] Opiekunki dla dzieci
+    | [#163] Zdrowie i opieka
+    | [#164] Obsługa klienta / call center
+    | [#520] Hostessa
+    | [#1213] Ochrona
+    | [#1215] Fryzjer / kosmetyczka
+    | [#1435] Kasjer / ekspedient
+    | [#1429] Marketing / PR / media
+    | [#1437] Gastronomia
+        | [#1475] Pomoc kuchenna / zmywak
+        | [#1471] Kucharz
+        | [#1473] Kelner / barman
+        | [#1477] Pozostałe
+    | [#1439] Hotelarstwo
+    | [#1441] Mechanik / blacharz / lakiernik
+    | [#1443] Budowa / remonty
+    | [#1445] Magazynier
+    | [#1447] Produkcja
+    | [#1449] Sprzątanie
+    | [#1425] HR
+    | [#1423] Finanse / księgowość
+    | [#1481] Praca za granicą
+    | [#1469] Wykładanie towaru / inwentar.
+    | [#1463] Roznoszenie ulotek
+    | [#1421] Administracja biurowa
+    | [#65] Pozostałe oferty pracy
+| [#628] Dom i Ogród
+    | [#565] Meble
+        | [#717] Biurka
+        | [#718] Fotele
+        | [#724] Komplety mebli
+        | [#719] Łóżka i materace
+        | [#720] Regały
+        | [#722] Sofy i kanapy
+        | [#721] Stoły i krzesła
+        | [#723] Szafy i komody
+        | [#725] Pozostałe meble
+    | [#737] Meble na wymiar
+    | [#282] Sprzęt AGD
+    | [#732] Zdrowie
+    | [#584] Ogród
+    | [#1193] Narzędzia
+    | [#292] Materiały budowlane
+    | [#279] Ogrzewanie
+    | [#1409] Wyposażenie wnętrz
+        | [#575] Dekoracje
+        | [#1291] Akcesoria kuchenne
+        | [#1419] Oświetlenie
+        | [#1415] Wyposażenie łazienki
+        | [#1417] Drzwi - okna - schody
+    | [#293] Pozostałe dom i ogród
+| [#99] Elektronika
+    | [#101] Telefony komórkowe
+        | [#388] HTC
+        | [#1483] Huawei
+        | [#386] iPhone
+        | [#387] LG
+        | [#1479] Microsoft
+        | [#385] Motorola
+        | [#382] Nokia
+        | [#383] Samsung
+        | [#1217] Sony
+        | [#384] Sony Ericsson
+        | [#390] Inne telefony gsm
+    | [#1407] Akcesoria telefoniczne
+    | [#443] Komputery
+        | [#1195] Drukarki i skanery
+        | [#1197] Komputery stacjonarne
+        | [#1199] Laptopy
+        | [#1201] Monitory
+        | [#1203] Myszki i klawiatury
+        | [#1205] Oprogramowanie
+        | [#1207] Routery i modemy
+        | [#1209] Akcesoria i części
+        | [#1211] Pozostałe
+    | [#1155] Tablety
+    | [#729] Telewizory
+    | [#93] Gry i Konsole
+    | [#726] Sprzęt DVD/Blu-ray
+    | [#727] Fotografia
+    | [#728] MP3 i sprzęt audio
+    | [#451] Pozostała elektronika
+| [#87] Moda
+    | [#642] Ubrania
+    | [#224] Buty
+    | [#219] Bielizna
+    | [#1319] Odzież ciążowa
+    | [#506] Dodatki
+    | [#401] Biżuteria
+    | [#626] Zegarki
+    | [#406] Kosmetyki i perfumy
+    | [#405] Pozostała moda
+| [#757] Rolnictwo
+    | [#1175] Ciągniki
+    | [#759] Maszyny rolnicze
+        | [#1179] Agregaty
+        | [#1183] Kombajny
+        | [#1285] Kosiarki
+        | [#1281] Opryskiwacze
+        | [#1185] Prasy
+        | [#1181] Pługi
+        | [#1283] Rozsiewacze
+        | [#1187] Siewniki
+        | [#1189] Pozostałe maszyny rolnicze
+    | [#1177] Przyczepy
+    | [#761] Produkty rolne
+    | [#1265] Części do maszyn rolniczych
+    | [#1267] Opony rolnicze
+    | [#763] Giełda zwierząt
+        | [#1273] Drób
+        | [#1287] Bydło
+        | [#1277] Kozy
+        | [#1275] Owce
+        | [#1271] Trzoda
+        | [#1279] Pozostałe zwierzęta
+    | [#1303] Ryneczek
+    | [#765] Pozostałe rolnicze
+| [#103] Zwierzęta
+    | [#139] Psy
+        | [#258] Psy bez rodowodu
+        | [#1519] Psy ze schronisk
+        | [#244] Amstaff
+        | [#706] Basset Hound
+        | [#245] Beagle
+        | [#295] Bernardyn
+        | [#684] Berneński Pies Pasterski
+        | [#685] Bokser
+        | [#686] Buldog
+        | [#687] Cane Corso
+        | [#246] Chihuahua
+        | [#247] Cocker Spaniel
+        | [#683] Doberman
+        | [#688] Dogo Canario
+        | [#248] Golden Retriever
+        | [#704] Grzywacz Chiński
+        | [#249] Husky
+        | [#488] Jack Russell Terrier
+        | [#294] Jamnik
+        | [#250] Labrador
+        | [#689] Maltańczyk
+        | [#690] Mops
+        | [#251] Owczarek
+        | [#691] Pekińczyk
+        | [#252] Pit Bull
+        | [#253] Rottweiler
+        | [#692] Seter
+        | [#254] Shih Tzu
+        | [#255] Sznaucer
+        | [#489] West Highland White Terrier
+        | [#256] York
+        | [#745] Pozostałe rasy
+    | [#138] Koty
+        | [#243] Koty bez rodowodu
+        | [#1521] Koty ze schronisk
+        | [#236] Brytyjski
+        | [#693] Bengalski
+        | [#694] Burmański
+        | [#695] Devon Rex
+        | [#237] Maine Coon
+        | [#238] Norweski
+        | [#239] Perski
+        | [#696] Ragdoll
+        | [#240] Rosyjski
+        | [#697] Sfinks
+        | [#241] Syberyjski
+        | [#700] Syjamski
+        | [#747] Pozostałe rasy
+    | [#1455] Ptaki
+    | [#1457] Gryzonie i Króliki
+    | [#1459] Konie
+    | [#1293] Akwarystyka
+        | [#1297] Akcesoria akwariowe
+        | [#1295] Akwaria
+        | [#1301] Rośliny akwariowe
+        | [#1299] Zwierzęta akwariowe
+    | [#140] Pozostałe zwierzęta
+    | [#272] Usługi dla zwierząt
+    | [#175] Akcesoria dla zwierząt
+    | [#180] Zaginione i znalezione
+| [#88] Dla Dzieci
+    | [#231] Zabawki
+    | [#516] Wózki dziecięce
+    | [#517] Foteliki - Nosidełka
+    | [#230] Ubranka dla dzieci
+    | [#734] Buciki
+    | [#743] Meble dla dzieci
+    | [#235] Pozostałe dla dzieci
+| [#767] Sport i Hobby
+    | [#431] Kolekcje
+    | [#461] Rowery
+    | [#771] Fitness
+    | [#769] Sporty zimowe
+    | [#773] Wędkarstwo
+    | [#465] Turystyka
+    | [#6] Społeczność
+    | [#1517] Sporty wodne
+    | [#100] Pozostały sport i hobby
+| [#751] Muzyka i Edukacja
+    | [#453] Książki
+        | [#1157] Literatura
+        | [#1165] Czasopisma
+        | [#1163] Dla dzieci
+        | [#1161] Komiksy
+        | [#1191] Książki naukowe
+        | [#753] Podręczniki szkolne
+        | [#1159] Poradniki i albumy
+        | [#1167] Pozostałe
+    | [#715] Muzyka
+    | [#1173] Filmy
+    | [#714] Instrumenty
+    | [#1169] Sprzęt muzyczny
+    | [#130] Korepetycje
+        | [#321] Angielski
+        | [#322] Biologia
+        | [#323] Chemia
+        | [#324] Fizyka
+        | [#374] Francuski
+        | [#325] Historia
+        | [#433] Hiszpański
+        | [#326] Matematyka
+        | [#327] Muzyka
+        | [#328] Niemiecki
+        | [#329] Polski
+        | [#330] Rosyjski
+        | [#373] Włoski
+        | [#338] Inne
+    | [#711] Kursy i Warsztaty
+        | [#332] Finansowe
+        | [#333] Językowe
+        | [#334] Komputerowe
+        | [#335] Kosmetyczne
+        | [#337] Prawo jazdy
+        | [#336] Tańca
+        | [#490] Zawodowe
+        | [#712] Kursy inne
+    | [#755] Pozostała muzyka i edukacja
+| [#619] Usługi i Firmy
+    | [#713] Muzycy
+    | [#131] Usługi finansowe
+    | [#133] Tłumaczenia
+    | [#168] Współpraca biznesowa
+    | [#179] Usługi reklamowe
+    | [#297] Usługi motoryzacyjne
+    | [#300] Obsługa imprez
+    | [#306] Budowa i Remont
+    | [#314] Usługi ogrodnicze
+    | [#354] Sprzątanie
+    | [#356] Usługi transportowe
+    | [#368] Usługi kosmetyczne
+    | [#375] Wyposażenie firm
+    | [#522] Usługi informatyczne
+    | [#523] Serwis AGD
+    | [#741] Usługi zdrowotne
+    | [#625] Pozostałe usługi
+| [#49] Ślub i Wesele
+    | [#1485] Moda ślubna
+        | [#1491] Biżuteria ślubna
+        | [#1493] Buty ślubne
+        | [#733] Suknie ślubne
+        | [#1495] Garnitury ślubne
+        | [#1497] Obrączki
+        | [#1499] Pozostałe
+    | [#1487] Usługi ślubne
+        | [#1501] Fotografia i filmowanie
+        | [#1503] Dekorowanie
+        | [#1505] Oprawa muzyczna
+        | [#1507] Pojazdy do ślubu
+        | [#1509] Pozostałe
+    | [#1489] Akcesoria ślubne
+        | [#1511] Zaproszenia ślubne
+        | [#1513] Dekoracje ślubne
+        | [#1515] Pozostałe

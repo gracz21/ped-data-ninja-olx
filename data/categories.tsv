@@ -1,0 +1,387 @@
+ID  PARENT_ID   NAME
+0       Root
+5	0	Motoryzacja
+3	0	Nieruchomości
+4	0	Praca
+628	0	Dom i Ogród
+99	0	Elektronika
+87	0	Moda
+757	0	Rolnictwo
+103	0	Zwierzęta
+88	0	Dla Dzieci
+767	0	Sport i Hobby
+751	0	Muzyka i Edukacja
+619	0	Usługi i Firmy
+49	0	Ślub i Wesele
+1307	3	Mieszkania
+1309	3	Domy
+709	3	Działki
+710	3	Biura i Lokale
+124	3	Garaże i Parkingi
+1289	3	Noclegi
+11	3	Stancje i Pokoje
+1321	3	Hale i Magazyny
+32	3	Pozostałe nieruchomości
+53	4	Edukacja
+56	4	IT / telekomunikacja
+62	4	Przedstawiciel handlowy
+64	4	Kierowca / kurier
+111	4	Opiekunki dla dzieci
+163	4	Zdrowie i opieka
+164	4	Obsługa klienta / call center
+520	4	Hostessa
+1213	4	Ochrona
+1215	4	Fryzjer / kosmetyczka
+1435	4	Kasjer / ekspedient
+1429	4	Marketing / PR / media
+1437	4	Gastronomia
+1439	4	Hotelarstwo
+1441	4	Mechanik / blacharz / lakiernik
+1443	4	Budowa / remonty
+1445	4	Magazynier
+1447	4	Produkcja
+1449	4	Sprzątanie
+1425	4	HR
+1423	4	Finanse / księgowość
+1481	4	Praca za granicą
+1469	4	Wykładanie towaru / inwentar.
+1463	4	Roznoszenie ulotek
+1421	4	Administracja biurowa
+65	4	Pozostałe oferty pracy
+84	5	Samochody osobowe
+81	5	Motocykle i Skutery
+85	5	Dostawcze i Ciężarowe
+1333	5	Przyczepy i Pojazdy użytkowe
+82	5	Części samochodowe
+1335	5	Części motocyklowe
+658	5	Opony i Felgi
+1461	5	Sprzęt car audio
+80	5	Pozostała motoryzacja
+1325	32	Wynajem
+1323	32	Sprzedaż
+1327	32	Zamiana
+1485	49	Moda ślubna
+1487	49	Usługi ślubne
+1489	49	Akcesoria ślubne
+1365	81	Chopper - Cruiser
+1367	81	Enduro - Funbike
+1369	81	Cross
+1371	81	Motorower
+1373	81	Quad - ATV
+1375	81	Skuter
+1377	81	Sportowy
+1379	81	Szosowo - Turystyczny
+1381	81	Pozostałe Motocykle i Skutery
+1399	82	Osobowe
+1465	82	Samochody na części
+1401	82	Dostawcze i Ciężarowe
+1403	82	Pozostałe
+181	84	Alfa Romeo
+182	84	Audi
+183	84	BMW
+1353	84	Cadillac
+184	84	Chevrolet
+185	84	Chrysler
+186	84	Citroen
+1347	84	Dacia
+187	84	Daewoo
+1349	84	Daihatsu
+1343	84	Dodge
+188	84	Fiat
+189	84	Ford
+190	84	Honda
+191	84	Hyundai
+1345	84	Jaguar
+1221	84	Jeep
+192	84	Kia
+193	84	Lancia
+1219	84	Land Rover
+1351	84	Lexus
+194	84	Mazda
+195	84	Mercedes-Benz
+1339	84	Mini
+196	84	Mitsubishi
+197	84	Nissan
+198	84	Opel
+199	84	Peugeot
+1257	84	Polonez
+1341	84	Porsche
+200	84	Renault
+296	84	Rover
+201	84	Saab
+202	84	Seat
+203	84	Skoda
+1337	84	Smart
+204	84	Subaru
+205	84	Suzuki
+206	84	Toyota
+207	84	Volkswagen
+208	84	Volvo
+209	84	Pozostałe osobowe
+1355	85	Autobusy
+1357	85	Dostawcze
+1359	85	Ciężarowe
+1361	85	Naczepy
+1255	85	Pozostałe Dostawcze i Ciężarowe
+642	87	Ubrania
+224	87	Buty
+219	87	Bielizna
+1319	87	Odzież ciążowa
+506	87	Dodatki
+401	87	Biżuteria
+626	87	Zegarki
+406	87	Kosmetyki i perfumy
+405	87	Pozostała moda
+231	88	Zabawki
+516	88	Wózki dziecięce
+517	88	Foteliki - Nosidełka
+230	88	Ubranka dla dzieci
+734	88	Buciki
+743	88	Meble dla dzieci
+235	88	Pozostałe dla dzieci
+101	99	Telefony komórkowe
+1407	99	Akcesoria telefoniczne
+443	99	Komputery
+1155	99	Tablety
+729	99	Telewizory
+93	99	Gry i Konsole
+726	99	Sprzęt DVD/Blu-ray
+727	99	Fotografia
+728	99	MP3 i sprzęt audio
+451	99	Pozostała elektronika
+388	101	HTC
+1483	101	Huawei
+386	101	iPhone
+387	101	LG
+1479	101	Microsoft
+385	101	Motorola
+382	101	Nokia
+383	101	Samsung
+1217	101	Sony
+384	101	Sony Ericsson
+390	101	Inne telefony gsm
+139	103	Psy
+138	103	Koty
+1455	103	Ptaki
+1457	103	Gryzonie i Króliki
+1459	103	Konie
+1293	103	Akwarystyka
+140	103	Pozostałe zwierzęta
+272	103	Usługi dla zwierząt
+175	103	Akcesoria dla zwierząt
+180	103	Zaginione i znalezione
+1313	124	Wynajem
+1315	124	Sprzedaż
+1317	124	Zamiana
+321	130	Angielski
+322	130	Biologia
+323	130	Chemia
+324	130	Fizyka
+374	130	Francuski
+325	130	Historia
+433	130	Hiszpański
+326	130	Matematyka
+327	130	Muzyka
+328	130	Niemiecki
+329	130	Polski
+330	130	Rosyjski
+373	130	Włoski
+338	130	Inne
+243	138	Koty bez rodowodu
+1521	138	Koty ze schronisk
+236	138	Brytyjski
+693	138	Bengalski
+694	138	Burmański
+695	138	Devon Rex
+237	138	Maine Coon
+238	138	Norweski
+239	138	Perski
+696	138	Ragdoll
+240	138	Rosyjski
+697	138	Sfinks
+241	138	Syberyjski
+700	138	Syjamski
+747	138	Pozostałe rasy
+258	139	Psy bez rodowodu
+1519	139	Psy ze schronisk
+244	139	Amstaff
+706	139	Basset Hound
+245	139	Beagle
+295	139	Bernardyn
+684	139	Berneński Pies Pasterski
+685	139	Bokser
+686	139	Buldog
+687	139	Cane Corso
+246	139	Chihuahua
+247	139	Cocker Spaniel
+683	139	Doberman
+688	139	Dogo Canario
+248	139	Golden Retriever
+704	139	Grzywacz Chiński
+249	139	Husky
+488	139	Jack Russell Terrier
+294	139	Jamnik
+250	139	Labrador
+689	139	Maltańczyk
+690	139	Mops
+251	139	Owczarek
+691	139	Pekińczyk
+252	139	Pit Bull
+253	139	Rottweiler
+692	139	Seter
+254	139	Shih Tzu
+255	139	Sznaucer
+489	139	West Highland White Terrier
+256	139	York
+745	139	Pozostałe rasy
+1195	443	Drukarki i skanery
+1197	443	Komputery stacjonarne
+1199	443	Laptopy
+1201	443	Monitory
+1203	443	Myszki i klawiatury
+1205	443	Oprogramowanie
+1207	443	Routery i modemy
+1209	443	Akcesoria i części
+1211	443	Pozostałe
+1157	453	Literatura
+1165	453	Czasopisma
+1163	453	Dla dzieci
+1161	453	Komiksy
+1191	453	Książki naukowe
+753	453	Podręczniki szkolne
+1159	453	Poradniki i albumy
+1167	453	Pozostałe
+717	565	Biurka
+718	565	Fotele
+724	565	Komplety mebli
+719	565	Łóżka i materace
+720	565	Regały
+722	565	Sofy i kanapy
+721	565	Stoły i krzesła
+723	565	Szafy i komody
+725	565	Pozostałe meble
+713	619	Muzycy
+131	619	Usługi finansowe
+133	619	Tłumaczenia
+168	619	Współpraca biznesowa
+179	619	Usługi reklamowe
+297	619	Usługi motoryzacyjne
+300	619	Obsługa imprez
+306	619	Budowa i Remont
+314	619	Usługi ogrodnicze
+354	619	Sprzątanie
+356	619	Usługi transportowe
+368	619	Usługi kosmetyczne
+375	619	Wyposażenie firm
+522	619	Usługi informatyczne
+523	619	Serwis AGD
+741	619	Usługi zdrowotne
+625	619	Pozostałe usługi
+565	628	Meble
+737	628	Meble na wymiar
+282	628	Sprzęt AGD
+732	628	Zdrowie
+584	628	Ogród
+1193	628	Narzędzia
+292	628	Materiały budowlane
+279	628	Ogrzewanie
+1409	628	Wyposażenie wnętrz
+293	628	Pozostałe dom i ogród
+1383	658	Opony
+1385	658	Felgi
+1387	658	Koła
+1389	658	Pozostałe Opony i Felgi
+25	709	Wynajem
+24	709	Sprzedaż
+1311	709	Zamiana
+127	710	Wynajem
+125	710	Sprzedaż
+1405	710	Zamiana
+332	711	Finansowe
+333	711	Językowe
+334	711	Komputerowe
+335	711	Kosmetyczne
+337	711	Prawo jazdy
+336	711	Tańca
+490	711	Zawodowe
+712	711	Kursy inne
+453	751	Książki
+715	751	Muzyka
+1173	751	Filmy
+714	751	Instrumenty
+1169	751	Sprzęt muzyczny
+130	751	Korepetycje
+711	751	Kursy i Warsztaty
+755	751	Pozostała muzyka i edukacja
+1175	757	Ciągniki
+759	757	Maszyny rolnicze
+1177	757	Przyczepy
+761	757	Produkty rolne
+1265	757	Części do maszyn rolniczych
+1267	757	Opony rolnicze
+763	757	Giełda zwierząt
+1303	757	Ryneczek
+765	757	Pozostałe rolnicze
+1179	759	Agregaty
+1183	759	Kombajny
+1285	759	Kosiarki
+1281	759	Opryskiwacze
+1185	759	Prasy
+1181	759	Pługi
+1283	759	Rozsiewacze
+1187	759	Siewniki
+1189	759	Pozostałe maszyny rolnicze
+1273	763	Drób
+1287	763	Bydło
+1277	763	Kozy
+1275	763	Owce
+1271	763	Trzoda
+1279	763	Pozostałe zwierzęta
+431	767	Kolekcje
+461	767	Rowery
+771	767	Fitness
+769	767	Sporty zimowe
+773	767	Wędkarstwo
+465	767	Turystyka
+6	767	Społeczność
+1517	767	Sporty wodne
+100	767	Pozostały sport i hobby
+1297	1293	Akcesoria akwariowe
+1295	1293	Akwaria
+1301	1293	Rośliny akwariowe
+1299	1293	Zwierzęta akwariowe
+15	1307	Wynajem
+14	1307	Sprzedaż
+16	1307	Zamiana
+20	1309	Wynajem
+18	1309	Sprzedaż
+22	1309	Zamiana
+1331	1321	Wynajem
+1329	1321	Sprzedaż
+1391	1333	Kempingowe
+1393	1333	Przyczepy towarowe
+1395	1333	Wózki widłowe
+1397	1333	Pozostałe Przyczepy i Pojazdy użytkowe
+575	1409	Dekoracje
+1291	1409	Akcesoria kuchenne
+1419	1409	Oświetlenie
+1415	1409	Wyposażenie łazienki
+1417	1409	Drzwi - okna - schody
+1475	1437	Pomoc kuchenna / zmywak
+1471	1437	Kucharz
+1473	1437	Kelner / barman
+1477	1437	Pozostałe
+1491	1485	Biżuteria ślubna
+1493	1485	Buty ślubne
+733	1485	Suknie ślubne
+1495	1485	Garnitury ślubne
+1497	1485	Obrączki
+1499	1485	Pozostałe
+1501	1487	Fotografia i filmowanie
+1503	1487	Dekorowanie
+1505	1487	Oprawa muzyczna
+1507	1487	Pojazdy do ślubu
+1509	1487	Pozostałe
+1511	1489	Zaproszenia ślubne
+1513	1489	Dekoracje ślubne
+1515	1489	Pozostałe
