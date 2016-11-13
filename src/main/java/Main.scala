@@ -73,8 +73,8 @@ object Main extends java.io.Serializable {
         bagOfWordsDS.createOrReplaceTempView("bag_of_words")
         advertisementDS.createOrReplaceTempView("advertisement")
         categoryDS.createOrReplaceTempView("category")
-        sqlContext.uncacheTable("advertisement")
-        sqlContext.uncacheTable("bag_of_words")
+        sqlContext.cacheTable("advertisement")
+        sqlContext.cacheTable("bag_of_words")
 
         val filteredAdvertisementDS = sqlContext.sql("SELECT * FROM advertisement WHERE id IN(SELECT DISTINCT advertisementId FROM bag_of_words WHERE word IN (SELECT word FROM bag_of_words GROUP BY word ORDER BY COUNT(word) DESC LIMIT 100))")
         filteredAdvertisementDS.createOrReplaceTempView("filtered_advertisement")
@@ -86,13 +86,6 @@ object Main extends java.io.Serializable {
 
         sqlContext.uncacheTable("advertisement")
         sqlContext.uncacheTable("bag_of_words")
-
-        sqlContext.sql("SELECT COUNT(1) FROM bag_of_words").show()
-        sqlContext.sql("SELECT COUNT(1) FROM filtered_bag_of_words").show()
-
-        sqlContext.sql("SELECT COUNT(1) FROM advertisement").show()
-        sqlContext.sql("SELECT COUNT(1) FROM filtered_advertisement").show()
-
 
         // odpowiedzi
         exercise2_5_1()
