@@ -31,67 +31,76 @@ object Main extends java.io.Serializable {
     val stopWords = sc.textFile("data/polish_stop_words.txt").collect()
 
     def main(args: Array[String]): Unit = {
-        //        val trainingRDD = sc.textFile("data/test.tsv")
-        val trainingRDD = sc.textFile("data/training.[0-9]*.tsv")
+        time {
+//            val trainingRDD = sc.textFile("data/test.tsv")
+//                    val trainingRDD = sc.textFile("data/training.[0-9]*.tsv")
+                            val trainingRDD = sc.textFile("data/training.0001.tsv")
 
-        //
-        case class AdvertisementTmp(id: Long, words: Array[String])
-        val bagOfWordsDS = trainingRDD.map(string => string.split("\t"))
-                .map(stringArray =>
-                    AdvertisementTmp(stringArray(0).toLong, processTitle(stringArray(1)))
-                )
-                .flatMap(
-                    advertisementTmp => advertisementTmp.words.map(
-                        word => BagOfWords(advertisementTmp.id, word)
+            //
+            case class AdvertisementTmp(id: Long, words: Array[String])
+            val bagOfWordsDS = trainingRDD.map(string => string.split("\t"))
+                    .map(stringArray =>
+                        AdvertisementTmp(stringArray(0).toLong, processTitle(stringArray(1)))
                     )
-                )
-                .toDS()
-
-        //
-        val advertisementDS = trainingRDD.map(string => string.split("\t"))
-                .map(
-                    stringArray => Advertisement(
-                        stringArray(0).toLong, stringArray(1),
-                        stringArray(4).toLong,
-                        if (!stringArray(5).isEmpty) Option(stringArray(5).toLong) else None,
-                        if (stringArray.length == 7) Option(stringArray(6).toLong) else None
+                    .flatMap(
+                        advertisementTmp => advertisementTmp.words.map(
+                            word => BagOfWords(advertisementTmp.id, word)
+                        )
                     )
-                )
-                .toDS()
+                    .toDS()
 
-        //
-        val categoryRDD = sc.textFile("data/categories.tsv")
-        val categoryDS = categoryRDD
-                .zipWithIndex().filter((tuple: (String, Long)) => tuple._2 >= 2)
-                .map(string => string._1.split("\t"))
-                .map(
-                    stringArray => Category(stringArray(0).toLong, stringArray(2))
-                )
-                .toDS()
+            //
+            val advertisementDS = trainingRDD.map(string => string.split("\t"))
+                    .map(
+                        stringArray => Advertisement(
+                            stringArray(0).toLong, stringArray(1),
+                            stringArray(4).toLong,
+                            if (!stringArray(5).isEmpty) Option(stringArray(5).toLong) else None,
+                            if (stringArray.length == 7) Option(stringArray(6).toLong) else None
+                        )
+                    )
+                    .toDS()
 
-        //
-        bagOfWordsDS.createOrReplaceTempView("bag_of_words")
-        advertisementDS.createOrReplaceTempView("advertisement")
-        categoryDS.createOrReplaceTempView("category")
-        sqlContext.cacheTable("advertisement")
-        sqlContext.cacheTable("bag_of_words")
+            //
+            val categoryRDD = sc.textFile("data/categories.tsv")
+            val categoryDS = categoryRDD
+                    .zipWithIndex().filter((tuple: (String, Long)) => tuple._2 >= 2)
+                    .map(string => string._1.split("\t"))
+                    .map(
+                        stringArray => Category(stringArray(0).toLong, stringArray(2))
+                    )
+                    .toDS()
 
-        val filteredAdvertisementDS = sqlContext.sql("SELECT * FROM advertisement WHERE id IN(SELECT DISTINCT advertisementId FROM bag_of_words WHERE word IN (SELECT word FROM bag_of_words GROUP BY word ORDER BY COUNT(word) DESC LIMIT 100))")
-        filteredAdvertisementDS.createOrReplaceTempView("filtered_advertisement")
-        sqlContext.cacheTable("filtered_advertisement")
+            //
+            bagOfWordsDS.createOrReplaceTempView("bag_of_words")
+            advertisementDS.createOrReplaceTempView("advertisement")
+            categoryDS.createOrReplaceTempView("category")
+            sqlContext.cacheTable("advertisement")
+            sqlContext.cacheTable("bag_of_words")
+            sqlContext.cacheTable("category")
 
-        val filteredBagOfWordsDS = sqlContext.sql("SELECT * FROM bag_of_words WHERE advertisementId IN (SELECT id FROM filtered_advertisement)")
-        filteredBagOfWordsDS.createOrReplaceTempView("filtered_bag_of_words")
-        sqlContext.cacheTable("filtered_bag_of_words")
+            val filteredAdvertisementDS = sqlContext.sql("SELECT * FROM advertisement WHERE id IN(SELECT DISTINCT advertisementId FROM bag_of_words WHERE word IN (SELECT word FROM bag_of_words GROUP BY word ORDER BY COUNT(word) DESC LIMIT 100))")
+            filteredAdvertisementDS.createOrReplaceTempView("filtered_advertisement")
+            sqlContext.cacheTable("filtered_advertisement")
 
-        sqlContext.uncacheTable("advertisement")
-        sqlContext.uncacheTable("bag_of_words")
+            val filteredBagOfWordsDS = sqlContext.sql("SELECT * FROM bag_of_words WHERE advertisementId IN (SELECT id FROM filtered_advertisement) AND word IN (SELECT word FROM bag_of_words GROUP BY word ORDER BY COUNT(word) DESC LIMIT 100)")
+            filteredBagOfWordsDS.createOrReplaceTempView("filtered_bag_of_words")
+            sqlContext.cacheTable("filtered_bag_of_words")
+
+            sqlContext.uncacheTable("advertisement")
+            sqlContext.uncacheTable("bag_of_words")
+        }
 
         // odpowiedzi
-        exercise2_5_1()
+        time {
+            exercise2_5_1_a()
+        }
+        time {
+            exercise2_5_1_b()
+        }
     }
 
-    def exercise2_5_1(): Unit = {
+    def exercise2_5_1_a(): Unit = {
         val features = sqlContext.sql("SELECT word, COUNT(word) FROM filtered_bag_of_words GROUP BY word ORDER BY COUNT(word) DESC LIMIT 30")
         features.foreach(row => {
             val feature = row.getString(0)
@@ -99,20 +108,83 @@ object Main extends java.io.Serializable {
 
             val advertisementsDS = sqlContext.sql(s"SELECT category1, category2, category3 FROM filtered_bag_of_words JOIN filtered_advertisement ON advertisementId=id WHERE word='$feature'")
 
-            val categoryCounter: CategoryCounter = new CategoryCounter()
-            categoryCounter.add(advertisementsDS.collect())
+            val categoryCounter: Counter = new Counter()
+            categoryCounter.addCategory(advertisementsDS.collect())
 
-            val categories = categoryCounter.getCategories
-            val sumOfCategories = categoryCounter.getSumOfCategories
+            val categories = categoryCounter.getKeys
+            val sumOfCategories = categoryCounter.getSumOfValues
+            val sortedCategories = categoryCounter.getSorted
 
-            println(f"$feature | $sumOfCategories | $categories")
+            val categoriesNames: Set[String] = getCategoriesNames(categories)
+
+            println(f"$feature | $sumOfCategories | ${categoriesNames.mkString(", ")} | ${getCategoryName(sortedCategories.head._1)} ${sortedCategories.head._2.toDouble / numberOfAdvertisements}, ${getCategoryName(sortedCategories(1)._1)} ${sortedCategories(1)._2.toDouble / numberOfAdvertisements}, ${getCategoryName(sortedCategories(2)._1)} ${sortedCategories(2)._2.toDouble / numberOfAdvertisements}")
         })
     }
 
-    class CategoryCounter {
+    def getCategoriesNames(categories: Set[Long]): Set[String] = {
+        categories.map(category => getCategoryName(category))
+    }
+
+    def getCategoryName(category: Long): String = {
+        sqlContext.sql(s"SELECT name FROM category WHERE id='$category'").collect()(0).getString(0)
+    }
+
+    def exercise2_5_1_b(): Unit = {
+        val featuresDS = sqlContext.sql("SELECT DISTINCT word FROM filtered_bag_of_words")
+        val features = featuresDS.collect().map(row => row.getString(0))
+
+        val featuresCombinations = features.combinations(2).toList
+
+        val combinationsWithCounter: mutable.Map[(String, String), Seq[Long]] = mutable.Map()
+
+        var i = 0
+        println(s"Combinations: ${featuresCombinations.length}")
+        featuresCombinations.foreach(combination => {
+            i = i + 1
+            println(s"Combination: $i")
+
+            val firstWord = combination(0)
+            val secondWord = combination(1)
+            val filteredBagOfWordsDS = sqlContext.sql(s"SELECT advertisementId FROM filtered_bag_of_words WHERE word = '$firstWord' OR word = '$secondWord'")
+
+            val counter = new Counter()
+            counter.addBagOfWords(filteredBagOfWordsDS.collect())
+
+            val advertisementsIdsWithCounterEqual2 = counter.getKeysWithCounterEqual2
+
+            combinationsWithCounter((combination(0), combination(1))) = advertisementsIdsWithCounterEqual2
+        })
+
+        val combinationsWithCounterSorted30 = combinationsWithCounter
+                .toSeq
+                .sortWith((tuple: ((String, String), Seq[Long]), tuple0: ((String, String), Seq[Long])) => tuple._2.length > tuple0._2.length)
+                .take(30)
+
+        combinationsWithCounterSorted30.foreach(combinationMapItem => {
+            val combinationWords = combinationMapItem._1
+            val combinationAdvertisementId = combinationMapItem._2
+
+            val advertisementsDS = sqlContext.sql(s"SELECT category1, category2, category3 FROM filtered_advertisement WHERE id IN (${combinationAdvertisementId.mkString(", ")})")
+            val advertisementsRows = advertisementsDS.collect()
+            val numberOfAdvertisements = advertisementsRows.length
+
+            val categoryCounter: Counter = new Counter()
+            categoryCounter.addCategory(advertisementsRows)
+
+            val categories = categoryCounter.getKeys
+            val sumOfCategories = categoryCounter.getSumOfValues
+            val sortedCategories = categoryCounter.getSorted
+
+            val categoriesNames: Set[String] = getCategoriesNames(categories)
+
+            println(f"$combinationWords._1, $combinationWords._2 | $sumOfCategories | ${categoriesNames.mkString(", ")} | ${getCategoryName(sortedCategories.head._1)} ${sortedCategories.head._2.toDouble / numberOfAdvertisements}, ${getCategoryName(sortedCategories(1)._1)} ${sortedCategories(1)._2.toDouble / numberOfAdvertisements}, ${getCategoryName(sortedCategories(2)._1)} ${sortedCategories(2)._2.toDouble / numberOfAdvertisements}")
+        })
+    }
+
+    class Counter {
         val map: mutable.Map[Long, Long] = mutable.Map()
 
-        def add(category: Array[Row]): Unit = {
+        def addCategory(category: Array[Row]): Unit = {
             category.foreach((row: Row) => {
                 val categories = ArrayBuffer[Long]()
                 if (!row.isNullAt(0)) categories += row.getLong(0)
@@ -127,18 +199,33 @@ object Main extends java.io.Serializable {
             })
         }
 
-        def getSorted: Seq[(Long, Long)] = {
-            map.toSeq.sortBy((tuple: (Long, Long)) => tuple._1 > tuple._2)
+        def addBagOfWords(bagOfWords: Array[Row]): Unit = {
+            bagOfWords.foreach((row: Row) => {
+                val advertisementId = row.getLong(0)
+
+                val counter: Long = map.getOrElse(advertisementId, 0L)
+                val newCounter = counter + 1
+                map(advertisementId) = newCounter
+            })
         }
 
-        def getCategories: Set[Long] = {
+        def getSorted: Seq[(Long, Long)] = {
+            map.toSeq.sortWith((tuple: (Long, Long), tuple0: (Long, Long)) => tuple._2 > tuple0._2)
+        }
+
+        def getKeysWithCounterEqual2: Seq[Long] = {
+            map.toSeq.filter((tuple: (Long, Long)) => tuple._2 == 2).map((tuple: (Long, Long)) => tuple._1)
+        }
+
+        def getKeys: Set[Long] = {
             map.keySet
         }
 
-        def getSumOfCategories: Long = {
+        def getSumOfValues: Long = {
             map.values.sum
         }
     }
+
 
     // znaczenie http://nkjp.pl/poliqarp/help/plse2.html
     // plik w morfeusz-sgjp.tagset w zrodlach (zawiera id tagow)
@@ -221,5 +308,13 @@ object Main extends java.io.Serializable {
     def disableLogging(): Unit = {
         Logger.getLogger("org").setLevel(Level.OFF)
         Logger.getLogger("akka").setLevel(Level.OFF)
+    }
+
+    def time[R](block: => R): R = {
+        val t0 = System.nanoTime()
+        val result = block // call-by-name
+        val t1 = System.nanoTime()
+        println("Elapsed time: " + (t1 - t0) + "ns")
+        result
     }
 }
