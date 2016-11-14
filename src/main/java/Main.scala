@@ -33,8 +33,8 @@ object Main extends java.io.Serializable {
     def main(args: Array[String]): Unit = {
         time {
 //            val trainingRDD = sc.textFile("data/test.tsv")
-//                    val trainingRDD = sc.textFile("data/training.[0-9]*.tsv")
-                            val trainingRDD = sc.textFile("data/training.0001.tsv")
+                    val trainingRDD = sc.textFile("data/training.[0-9]*.tsv")
+//                            val trainingRDD = sc.textFile("data/training.0001.tsv")
 
             //
             case class AdvertisementTmp(id: Long, words: Array[String])
