@@ -3,6 +3,7 @@ import java.util.Properties
 
 import org.apache.log4j.{Level, Logger}
 import org.apache.spark.sql.{Dataset, Row, SaveMode, SparkSession}
+import org.apache.spark.sql.functions.{asc, desc, col}
 import pl.sgjp.morfeusz.{Morfeusz, MorfeuszUsage, MorphInterpretation}
 
 import scala.collection.mutable.ArrayBuffer
@@ -191,24 +192,23 @@ object Main extends java.io.Serializable {
     }
 
     def exercise2_5_2(): Unit = {
-      sqlContext.sql("SELECT all.idA, all.idB, COALESCE(allInter.inter, 0)/(summA.summ + summB.summ - COALESCE(allInter.inter, 0)) sim FROM " +
-        "(SELECT a.id idA, b.id idB FROM (SELECT * FROM filtered_advertisement LIMIT 10000) a JOIN (SELECT * FROM filtered_advertisement) b ON a.id <> b.id) all JOIN " +
+      sqlContext.sql("SELECT idA, idB, sim FROM " +
+        "(SELECT idA, idB, sim, ROW_NUMBER() OVER (PARTITION BY idA ORDER BY sim DESC) rank FROM " +
+        "(SELECT all.idA, all.idB, COALESCE(allInter.inter, 0)/(summA.summ + summB.summ - COALESCE(allInter.inter, 0)) sim FROM " +
+        "(SELECT a.id idA, b.id idB FROM (SELECT * FROM filtered_advertisement) b JOIN (SELECT * FROM filtered_advertisement LIMIT 1000) a ON a.id <> b.id) all JOIN " +
         "(SELECT e.advertisementId as idA, COUNT(*) summ FROM filtered_bag_of_words e GROUP BY e.advertisementId) summA ON all.idA = summA.idA JOIN " +
         "(SELECT f.advertisementId as idB, COUNT(*) summ FROM filtered_bag_of_words f GROUP BY f.advertisementId) summB ON all.idB = summB.idB LEFT JOIN " +
-        "(SELECT c.advertisementId idA, d.advertisementId idB, COUNT(*) inter FROM filtered_bag_of_words c JOIN filtered_bag_of_words d ON c.word = d.word GROUP BY c.advertisementId, d.advertisementId) allInter ON all.idA = allInter.idA AND all.idB = allInter.idB")
+        "(SELECT c.advertisementId idA, d.advertisementId idB, COUNT(*) inter FROM filtered_bag_of_words c JOIN filtered_bag_of_words d ON c.word = d.word GROUP BY c.advertisementId, d.advertisementId) allInter ON all.idA = allInter.idA AND all.idB = allInter.idB)) WHERE rank <= 10")
           .createOrReplaceTempView("similarity")
 
         sqlContext.cacheTable("similarity")
 
-          sqlContext.sql("SELECT * FROM filtered_advertisement LIMIT 10000")
-              .as[Advertisement]
-            .foreach(advertisementA => {
-              sqlContext.sql(s"SELECT ${advertisementA.id} idA, ${advertisementA.category1} category1A, ${advertisementA.category2.getOrElse("null")} category2A, ${advertisementA.category3.getOrElse("null")} category3A, " +
-                s"b.id idB, b.category1 category1B, b.category2 category2B, b.category3 category3B, a.sim similarity FROM similarity a JOIN filtered_advertisement b ON a.idB = b.id WHERE a.idA = ${advertisementA.id} ORDER BY a.sim DESC LIMIT 10")
-              .as[Neighbour]
-                .foreach(neighbour => println(f"${neighbour.idA} | ${neighbour.category1A} | ${neighbour.category2A.getOrElse("None")} | ${neighbour.category3A.getOrElse("None")}" +
-                  f" | ${neighbour.idB} | ${neighbour.category1B} | ${neighbour.category2B.getOrElse("None")} | ${neighbour.category3B.getOrElse("None")} | ${neighbour.similarity}"))
-            })
+      sqlContext.sql(s"SELECT a.id idA, a.category1 category1A, a.category2 category2A, a.category3 category3A, " +
+        s"b.id idB, b.category1 category1B, b.category2 category2B, b.category3 category3B, c.sim similarity FROM similarity c JOIN " +
+        s"filtered_advertisement a ON c.idA = a.id JOIN filtered_advertisement b ON c.idB = b.id")
+        .as[Neighbour]
+        .foreach(neighbour => println(f"${neighbour.idA} | ${neighbour.category1A} | ${neighbour.category2A.getOrElse("None")} | ${neighbour.category3A.getOrElse("None")}" +
+          f" | ${neighbour.idB} | ${neighbour.category1B} | ${neighbour.category2B.getOrElse("None")} | ${neighbour.category3B.getOrElse("None")} | ${neighbour.similarity}"))
   }
 
     class Counter {
