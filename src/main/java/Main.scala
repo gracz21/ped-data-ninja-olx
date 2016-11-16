@@ -192,13 +192,21 @@ object Main extends java.io.Serializable {
     }
 
     def exercise2_5_2(): Unit = {
+      sqlContext.sql("SELECT advertisementId id, COUNT(*) summ FROM filtered_bag_of_words GROUP BY advertisementId").createOrReplaceTempView("words_sum")
+      sqlContext.cacheTable("words_sum")
+
+      sqlContext.sql("SELECT id FROM filtered_advertisement LIMIT 1000").createOrReplaceTempView("advertisementA")
+      sqlContext.cacheTable("advertisementA")
+
       sqlContext.sql("SELECT idA, idB, sim FROM " +
         "(SELECT idA, idB, sim, ROW_NUMBER() OVER (PARTITION BY idA ORDER BY sim DESC) rank FROM " +
-        "(SELECT all.idA, all.idB, COALESCE(allInter.inter, 0)/(summA.summ + summB.summ - COALESCE(allInter.inter, 0)) sim FROM " +
-        "(SELECT a.id idA, b.id idB FROM (SELECT * FROM filtered_advertisement) b JOIN (SELECT * FROM filtered_advertisement LIMIT 1000) a ON a.id <> b.id) all JOIN " +
-        "(SELECT e.advertisementId as idA, COUNT(*) summ FROM filtered_bag_of_words e GROUP BY e.advertisementId) summA ON all.idA = summA.idA JOIN " +
-        "(SELECT f.advertisementId as idB, COUNT(*) summ FROM filtered_bag_of_words f GROUP BY f.advertisementId) summB ON all.idB = summB.idB LEFT JOIN " +
-        "(SELECT c.advertisementId idA, d.advertisementId idB, COUNT(*) inter FROM filtered_bag_of_words c JOIN filtered_bag_of_words d ON c.word = d.word GROUP BY c.advertisementId, d.advertisementId) allInter ON all.idA = allInter.idA AND all.idB = allInter.idB)) WHERE rank <= 10")
+        "(SELECT a.id idA, b.id idB, COALESCE(allInter.inter, 0)/(summA.summ + summB.summ - COALESCE(allInter.inter, 0)) sim FROM " +
+        "filtered_advertisement b JOIN advertisementA a ON a.id <> b.id LEFT JOIN " +
+        "(SELECT c.advertisementId idA, d.advertisementId idB, COUNT(*) inter FROM (SELECT * FROM filtered_bag_of_words WHERE advertisementId in (SELECT id FROM advertisementA)) c JOIN filtered_bag_of_words d ON c.word = d.word GROUP BY c.advertisementId, d.advertisementId) allInter " +
+        "ON a.id = allInter.idA AND b.id = allInter.idB JOIN " +
+        "words_sum summA ON a.id = summA.id JOIN " +
+        "words_sum summB ON b.id = summB.id)) " +
+        "WHERE rank <= 10")
           .createOrReplaceTempView("similarity")
 
         sqlContext.cacheTable("similarity")
