@@ -14,12 +14,18 @@ case class BagOfWords(advertisementId: Long, word: String)
 
 case class Category(id: Long, name: String)
 
+case class Neighbour(idA: Long, category1A: Long, category2A: Option[Long], category3A: Option[Long],
+                     idB: Long, category1B: Long, category2B: Option[Long], category3B: Option[Long], similarity: Double)
+
 object Main extends java.io.Serializable {
     disableLogging()
 
     val sparkSession = SparkSession.builder.
             master("local[*]")
             .appName("NinjaCosTam")
+            .config("spark.ui.showConsoleProgress", false)
+            .config("spark.sql.crossJoin.enabled", true)
+            .config("spark.sql.broadcastTimeout", 999999999)
             .getOrCreate()
     val sc = sparkSession.sparkContext
     val sqlContext = sparkSession.sqlContext
@@ -97,6 +103,9 @@ object Main extends java.io.Serializable {
         }
         time {
             exercise2_5_1_b()
+        }
+        time {
+          exercise2_5_2()
         }
     }
 
@@ -180,6 +189,27 @@ object Main extends java.io.Serializable {
             println(f"$combinationWords._1, $combinationWords._2 | $sumOfCategories | ${categoriesNames.mkString(", ")} | ${getCategoryName(sortedCategories.head._1)} ${sortedCategories.head._2.toDouble / numberOfAdvertisements}, ${getCategoryName(sortedCategories(1)._1)} ${sortedCategories(1)._2.toDouble / numberOfAdvertisements}, ${getCategoryName(sortedCategories(2)._1)} ${sortedCategories(2)._2.toDouble / numberOfAdvertisements}")
         })
     }
+
+    def exercise2_5_2(): Unit = {
+      sqlContext.sql("SELECT all.idA, all.idB, COALESCE(allInter.inter, 0)/(summA.summ + summB.summ - COALESCE(allInter.inter, 0)) sim FROM " +
+        "(SELECT a.id idA, b.id idB FROM (SELECT * FROM filtered_advertisement LIMIT 10000) a JOIN (SELECT * FROM filtered_advertisement) b ON a.id <> b.id) all JOIN " +
+        "(SELECT e.advertisementId as idA, COUNT(*) summ FROM filtered_bag_of_words e GROUP BY e.advertisementId) summA ON all.idA = summA.idA JOIN " +
+        "(SELECT f.advertisementId as idB, COUNT(*) summ FROM filtered_bag_of_words f GROUP BY f.advertisementId) summB ON all.idB = summB.idB LEFT JOIN " +
+        "(SELECT c.advertisementId idA, d.advertisementId idB, COUNT(*) inter FROM filtered_bag_of_words c JOIN filtered_bag_of_words d ON c.word = d.word GROUP BY c.advertisementId, d.advertisementId) allInter ON all.idA = allInter.idA AND all.idB = allInter.idB")
+          .createOrReplaceTempView("similarity")
+
+        sqlContext.cacheTable("similarity")
+
+          sqlContext.sql("SELECT * FROM filtered_advertisement LIMIT 10000")
+              .as[Advertisement]
+            .foreach(advertisementA => {
+              sqlContext.sql(s"SELECT ${advertisementA.id} idA, ${advertisementA.category1} category1A, ${advertisementA.category2.getOrElse("null")} category2A, ${advertisementA.category3.getOrElse("null")} category3A, " +
+                s"b.id idB, b.category1 category1B, b.category2 category2B, b.category3 category3B, a.sim similarity FROM similarity a JOIN filtered_advertisement b ON a.idB = b.id WHERE a.idA = ${advertisementA.id} ORDER BY a.sim DESC LIMIT 10")
+              .as[Neighbour]
+                .foreach(neighbour => println(f"${neighbour.idA} | ${neighbour.category1A} | ${neighbour.category2A.getOrElse("None")} | ${neighbour.category3A.getOrElse("None")}" +
+                  f" | ${neighbour.idB} | ${neighbour.category1B} | ${neighbour.category2B.getOrElse("None")} | ${neighbour.category3B.getOrElse("None")} | ${neighbour.similarity}"))
+            })
+  }
 
     class Counter {
         val map: mutable.Map[Long, Long] = mutable.Map()
