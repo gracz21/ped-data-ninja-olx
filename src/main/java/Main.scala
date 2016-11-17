@@ -27,6 +27,8 @@ object Main extends java.io.Serializable {
             .config("spark.ui.showConsoleProgress", false)
             .config("spark.sql.crossJoin.enabled", true)
             .config("spark.sql.broadcastTimeout", 999999999)
+            .config("spark.worker.cleanup.enabled", true)
+            .config("spark.worker.cleanup.interval", 60)
             .getOrCreate()
     val sc = sparkSession.sparkContext
     val sqlContext = sparkSession.sqlContext
@@ -195,28 +197,35 @@ object Main extends java.io.Serializable {
       sqlContext.sql("SELECT advertisementId id, COUNT(*) summ FROM filtered_bag_of_words GROUP BY advertisementId").createOrReplaceTempView("words_sum")
       sqlContext.cacheTable("words_sum")
 
-      sqlContext.sql("SELECT id FROM filtered_advertisement LIMIT 1000").createOrReplaceTempView("advertisementA")
-      sqlContext.cacheTable("advertisementA")
+      for(i <- 0 to 9) {
+        if(i > 0)
+          sqlContext.uncacheTable("advertisementA")
+        sqlContext.sql(s"SELECT id FROM (SELECT id, row_number() OVER (ORDER BY id) rank FROM filtered_advertisement) WHERE rank > ${i * 1000}  AND rank <= ${(i+1) * 1000}")
+          .createOrReplaceTempView("advertisementA")
+        sqlContext.cacheTable("advertisementA")
 
-      sqlContext.sql("SELECT idA, idB, sim FROM " +
-        "(SELECT idA, idB, sim, ROW_NUMBER() OVER (PARTITION BY idA ORDER BY sim DESC) rank FROM " +
-        "(SELECT a.id idA, b.id idB, COALESCE(allInter.inter, 0)/(summA.summ + summB.summ - COALESCE(allInter.inter, 0)) sim FROM " +
-        "filtered_advertisement b JOIN advertisementA a ON a.id <> b.id LEFT JOIN " +
-        "(SELECT c.advertisementId idA, d.advertisementId idB, COUNT(*) inter FROM (SELECT * FROM filtered_bag_of_words WHERE advertisementId in (SELECT id FROM advertisementA)) c JOIN filtered_bag_of_words d ON c.word = d.word GROUP BY c.advertisementId, d.advertisementId) allInter " +
-        "ON a.id = allInter.idA AND b.id = allInter.idB JOIN " +
-        "words_sum summA ON a.id = summA.id JOIN " +
-        "words_sum summB ON b.id = summB.id)) " +
-        "WHERE rank <= 10")
+        if(i > 0)
+          sqlContext.uncacheTable("similarity")
+        sqlContext.sql("SELECT idA, idB, sim FROM " +
+          "(SELECT idA, idB, sim, ROW_NUMBER() OVER (PARTITION BY idA ORDER BY sim DESC) rank FROM " +
+          "(SELECT a.id idA, b.id idB, COALESCE(allInter.inter, 0)/(summA.summ + summB.summ - COALESCE(allInter.inter, 0)) sim FROM " +
+          "filtered_advertisement b JOIN advertisementA a ON a.id <> b.id LEFT JOIN " +
+          "(SELECT c.advertisementId idA, d.advertisementId idB, COUNT(*) inter FROM (SELECT * FROM filtered_bag_of_words WHERE advertisementId in (SELECT id FROM advertisementA)) c JOIN filtered_bag_of_words d ON c.word = d.word GROUP BY c.advertisementId, d.advertisementId) allInter " +
+          "ON a.id = allInter.idA AND b.id = allInter.idB JOIN " +
+          "words_sum summA ON a.id = summA.id JOIN " +
+          "words_sum summB ON b.id = summB.id)) " +
+          "WHERE rank <= 10")
           .createOrReplaceTempView("similarity")
 
         sqlContext.cacheTable("similarity")
 
-      sqlContext.sql(s"SELECT a.id idA, a.category1 category1A, a.category2 category2A, a.category3 category3A, " +
-        s"b.id idB, b.category1 category1B, b.category2 category2B, b.category3 category3B, c.sim similarity FROM similarity c JOIN " +
-        s"filtered_advertisement a ON c.idA = a.id JOIN filtered_advertisement b ON c.idB = b.id")
-        .as[Neighbour]
-        .foreach(neighbour => println(f"${neighbour.idA} | ${neighbour.category1A} | ${neighbour.category2A.getOrElse("None")} | ${neighbour.category3A.getOrElse("None")}" +
-          f" | ${neighbour.idB} | ${neighbour.category1B} | ${neighbour.category2B.getOrElse("None")} | ${neighbour.category3B.getOrElse("None")} | ${neighbour.similarity}"))
+        sqlContext.sql(s"SELECT a.id idA, a.category1 category1A, a.category2 category2A, a.category3 category3A, " +
+          s"b.id idB, b.category1 category1B, b.category2 category2B, b.category3 category3B, c.sim similarity FROM similarity c JOIN " +
+          s"filtered_advertisement a ON c.idA = a.id JOIN filtered_advertisement b ON c.idB = b.id ORDER BY idA, similarity DESC")
+          .as[Neighbour]
+          .foreach(neighbour => println(f"${neighbour.idA} | ${neighbour.category1A} | ${neighbour.category2A.getOrElse("None")} | ${neighbour.category3A.getOrElse("None")}" +
+            f" | ${neighbour.idB} | ${neighbour.category1B} | ${neighbour.category2B.getOrElse("None")} | ${neighbour.category3B.getOrElse("None")} | ${neighbour.similarity}"))
+      }
   }
 
     class Counter {
