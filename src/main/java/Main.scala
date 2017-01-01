@@ -1,231 +1,145 @@
+import java.time.LocalDateTime
 import java.util
-import java.util.Properties
 
 import org.apache.log4j.{Level, Logger}
-import org.apache.spark.sql.{Dataset, Row, SaveMode, SparkSession}
+import org.apache.spark.mllib.classification._
+import org.apache.spark.mllib.evaluation.MulticlassMetrics
+import org.apache.spark.mllib.feature.{HashingTF, IDF}
+import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.SparkSession
 import pl.sgjp.morfeusz.{Morfeusz, MorfeuszUsage, MorphInterpretation}
 
-import scala.collection.mutable.ArrayBuffer
-import scala.collection.{JavaConversions, Set, mutable}
+import scala.collection.{JavaConversions, Map, mutable}
+import scalax.io.{Output, Resource}
 
-case class Advertisement(id: Long, title: String, category1: Long, category2: Option[Long], category3: Option[Long])
-
-case class BagOfWords(advertisementId: Long, word: String)
-
-case class Category(id: Long, name: String)
+case class Advertisement(title: String, category: Long)
 
 object Main extends java.io.Serializable {
-    disableLogging()
+    val output: Output = Resource.fromFile("results/result_" + LocalDateTime.now().toString)
+
+    //    disableLogging()
 
     val sparkSession = SparkSession.builder.
             master("local[*]")
             .appName("NinjaCosTam")
+            .config("spark.executor.memory", "6g")
             .getOrCreate()
     val sc = sparkSession.sparkContext
-    val sqlContext = sparkSession.sqlContext
-
-    import sqlContext.implicits._
 
     val morfeusz = Morfeusz.createInstance(MorfeuszUsage.ANALYSE_ONLY)
 
     val stopWords = sc.textFile("data/polish_stop_words.txt").collect()
 
     def main(args: Array[String]): Unit = {
-        time {
-//            val trainingRDD = sc.textFile("data/test.tsv")
-                    val trainingRDD = sc.textFile("data/training.[0-9]*.tsv")
-//                            val trainingRDD = sc.textFile("data/training.0001.tsv")
+        disableLogging()
 
-            //
-            case class AdvertisementTmp(id: Long, words: Array[String])
-            val bagOfWordsDS = trainingRDD.map(string => string.split("\t"))
-                    .map(stringArray =>
-                        AdvertisementTmp(stringArray(0).toLong, processTitle(stringArray(1)))
-                    )
-                    .flatMap(
-                        advertisementTmp => advertisementTmp.words.map(
-                            word => BagOfWords(advertisementTmp.id, word)
-                        )
-                    )
-                    .toDS()
+        //        val data = sc.textFile("data/test.tsv")
+                val data = sc.textFile("data/training.[0-9]*.tsv")
+//        val data = sc.textFile("data/training.0001.tsv")
 
-            //
-            val advertisementDS = trainingRDD.map(string => string.split("\t"))
-                    .map(
-                        stringArray => Advertisement(
-                            stringArray(0).toLong, stringArray(1),
-                            stringArray(4).toLong,
-                            if (!stringArray(5).isEmpty) Option(stringArray(5).toLong) else None,
-                            if (stringArray.length == 7) Option(stringArray(6).toLong) else None
-                        )
-                    )
-                    .toDS()
+        val categoriesMap = data
+                .map(string => string.split("\t"))
+                .map(stringArray => stringArray(4).toInt)
+                .distinct()
+                .zipWithIndex()
+                .collectAsMap()
 
-            //
-            val categoryRDD = sc.textFile("data/categories.tsv")
-            val categoryDS = categoryRDD
-                    .zipWithIndex().filter((tuple: (String, Long)) => tuple._2 >= 2)
-                    .map(string => string._1.split("\t"))
-                    .map(
-                        stringArray => Category(stringArray(0).toLong, stringArray(2))
-                    )
-                    .toDS()
+        val convertedData = data
+                .map(string => string.split("\t"))
+                .map(stringArray =>
+                    Advertisement(stringArray(1), categoriesMap(stringArray(4).toInt))
+                )
 
-            //
-            bagOfWordsDS.createOrReplaceTempView("bag_of_words")
-            advertisementDS.createOrReplaceTempView("advertisement")
-            categoryDS.createOrReplaceTempView("category")
-            sqlContext.cacheTable("advertisement")
-            sqlContext.cacheTable("bag_of_words")
-            sqlContext.cacheTable("category")
+        splitDataAndExecute(convertedData, categoriesMap.size, Seq(Array(0.6, 0.4)))
+    }
 
-            val filteredAdvertisementDS = sqlContext.sql("SELECT * FROM advertisement WHERE id IN(SELECT DISTINCT advertisementId FROM bag_of_words WHERE word IN (SELECT word FROM bag_of_words GROUP BY word ORDER BY COUNT(word) DESC LIMIT 100))")
-            filteredAdvertisementDS.createOrReplaceTempView("filtered_advertisement")
-            sqlContext.cacheTable("filtered_advertisement")
+    private def splitDataAndExecute(convertedData: RDD[Advertisement], categories: Int, splits: Seq[Array[Double]]) = {
+        for (split <- splits) {
+            output.write("Train=" + split(0) + ";Test=" + split(1) + "\n")
+            val Array(training, test) = convertedData.randomSplit(split, 44)
 
-            val filteredBagOfWordsDS = sqlContext.sql("SELECT * FROM bag_of_words WHERE advertisementId IN (SELECT id FROM filtered_advertisement) AND word IN (SELECT word FROM bag_of_words GROUP BY word ORDER BY COUNT(word) DESC LIMIT 100)")
-            filteredBagOfWordsDS.createOrReplaceTempView("filtered_bag_of_words")
-            sqlContext.cacheTable("filtered_bag_of_words")
-
-            sqlContext.uncacheTable("advertisement")
-            sqlContext.uncacheTable("bag_of_words")
-        }
-
-        // odpowiedzi
-        time {
-            exercise2_5_1_a()
-        }
-        time {
-            exercise2_5_1_b()
+            output.write("With TFIDF:\n")
+            execute(training, test, categories, tfidf = true)
+            output.write("Without TFIDF:\n")
+            execute(training, test, categories, tfidf = false)
         }
     }
 
-    def exercise2_5_1_a(): Unit = {
-        val features = sqlContext.sql("SELECT word, COUNT(word) FROM filtered_bag_of_words GROUP BY word ORDER BY COUNT(word) DESC LIMIT 30")
-        features.foreach(row => {
-            val feature = row.getString(0)
-            val numberOfAdvertisements = row.getLong(1)
+    private def execute(training: RDD[Advertisement], test: RDD[Advertisement], categories: Int, tfidf: Boolean) = {
+        val trainDataSet = createLabeledPointDataSet(training, tfidf)
+        val testDataSet = createLabeledPointDataSet(test, tfidf)
 
-            val advertisementsDS = sqlContext.sql(s"SELECT category1, category2, category3 FROM filtered_bag_of_words JOIN filtered_advertisement ON advertisementId=id WHERE word='$feature'")
-
-            val categoryCounter: Counter = new Counter()
-            categoryCounter.addCategory(advertisementsDS.collect())
-
-            val categories = categoryCounter.getKeys
-            val sumOfCategories = categoryCounter.getSumOfValues
-            val sortedCategories = categoryCounter.getSorted
-
-            val categoriesNames: Set[String] = getCategoriesNames(categories)
-
-            println(f"$feature | $sumOfCategories | ${categoriesNames.mkString(", ")} | ${getCategoryName(sortedCategories.head._1)} ${sortedCategories.head._2.toDouble / numberOfAdvertisements}, ${getCategoryName(sortedCategories(1)._1)} ${sortedCategories(1)._2.toDouble / numberOfAdvertisements}, ${getCategoryName(sortedCategories(2)._1)} ${sortedCategories(2)._2.toDouble / numberOfAdvertisements}")
-        })
+        naiveBayes(trainDataSet, testDataSet, Seq(0.1, 0.2, 0.3))
+        logisticRegression(trainDataSet, testDataSet, categories, Seq((10, 0.01)))
     }
 
-    def getCategoriesNames(categories: Set[Long]): Set[String] = {
-        categories.map(category => getCategoryName(category))
-    }
+    private def naiveBayes(trainDataSet: RDD[LabeledPoint], testDataSet: RDD[LabeledPoint], lambdas: Seq[Double]) = {
+        for (lambda <- lambdas) {
+            var model: NaiveBayesModel = null
+            val resultTime = time {
+                model = NaiveBayes.train(trainDataSet, lambda = lambda)
+            }
 
-    def getCategoryName(category: Long): String = {
-        sqlContext.sql(s"SELECT name FROM category WHERE id='$category'").collect()(0).getString(0)
-    }
-
-    def exercise2_5_1_b(): Unit = {
-        val featuresDS = sqlContext.sql("SELECT DISTINCT word FROM filtered_bag_of_words")
-        val features = featuresDS.collect().map(row => row.getString(0))
-
-        val featuresCombinations = features.combinations(2).toList
-
-        val combinationsWithCounter: mutable.Map[(String, String), Seq[Long]] = mutable.Map()
-
-        var i = 0
-        println(s"Combinations: ${featuresCombinations.length}")
-        featuresCombinations.foreach(combination => {
-            i = i + 1
-            println(s"Combination: $i")
-
-            val firstWord = combination(0)
-            val secondWord = combination(1)
-            val filteredBagOfWordsDS = sqlContext.sql(s"SELECT advertisementId FROM filtered_bag_of_words WHERE word = '$firstWord' OR word = '$secondWord'")
-
-            val counter = new Counter()
-            counter.addBagOfWords(filteredBagOfWordsDS.collect())
-
-            val advertisementsIdsWithCounterEqual2 = counter.getKeysWithCounterEqual2
-
-            combinationsWithCounter((combination(0), combination(1))) = advertisementsIdsWithCounterEqual2
-        })
-
-        val combinationsWithCounterSorted30 = combinationsWithCounter
-                .toSeq
-                .sortWith((tuple: ((String, String), Seq[Long]), tuple0: ((String, String), Seq[Long])) => tuple._2.length > tuple0._2.length)
-                .take(30)
-
-        combinationsWithCounterSorted30.foreach(combinationMapItem => {
-            val combinationWords = combinationMapItem._1
-            val combinationAdvertisementId = combinationMapItem._2
-
-            val advertisementsDS = sqlContext.sql(s"SELECT category1, category2, category3 FROM filtered_advertisement WHERE id IN (${combinationAdvertisementId.mkString(", ")})")
-            val advertisementsRows = advertisementsDS.collect()
-            val numberOfAdvertisements = advertisementsRows.length
-
-            val categoryCounter: Counter = new Counter()
-            categoryCounter.addCategory(advertisementsRows)
-
-            val categories = categoryCounter.getKeys
-            val sumOfCategories = categoryCounter.getSumOfValues
-            val sortedCategories = categoryCounter.getSorted
-
-            val categoriesNames: Set[String] = getCategoriesNames(categories)
-
-            println(f"$combinationWords._1, $combinationWords._2 | $sumOfCategories | ${categoriesNames.mkString(", ")} | ${getCategoryName(sortedCategories.head._1)} ${sortedCategories.head._2.toDouble / numberOfAdvertisements}, ${getCategoryName(sortedCategories(1)._1)} ${sortedCategories(1)._2.toDouble / numberOfAdvertisements}, ${getCategoryName(sortedCategories(2)._1)} ${sortedCategories(2)._2.toDouble / numberOfAdvertisements}")
-        })
-    }
-
-    class Counter {
-        val map: mutable.Map[Long, Long] = mutable.Map()
-
-        def addCategory(category: Array[Row]): Unit = {
-            category.foreach((row: Row) => {
-                val categories = ArrayBuffer[Long]()
-                if (!row.isNullAt(0)) categories += row.getLong(0)
-                if (!row.isNullAt(1)) categories += row.getLong(1)
-                if (!row.isNullAt(2)) categories += row.getLong(2)
-
-                categories.foreach((category: Long) => {
-                    val counter: Long = map.getOrElse(category, 0L)
-                    val newCounter = counter + 1
-                    map(category) = newCounter
-                })
-            })
-        }
-
-        def addBagOfWords(bagOfWords: Array[Row]): Unit = {
-            bagOfWords.foreach((row: Row) => {
-                val advertisementId = row.getLong(0)
-
-                val counter: Long = map.getOrElse(advertisementId, 0L)
-                val newCounter = counter + 1
-                map(advertisementId) = newCounter
-            })
-        }
-
-        def getSorted: Seq[(Long, Long)] = {
-            map.toSeq.sortWith((tuple: (Long, Long), tuple0: (Long, Long)) => tuple._2 > tuple0._2)
-        }
-
-        def getKeysWithCounterEqual2: Seq[Long] = {
-            map.toSeq.filter((tuple: (Long, Long)) => tuple._2 == 2).map((tuple: (Long, Long)) => tuple._1)
-        }
-
-        def getKeys: Set[Long] = {
-            map.keySet
-        }
-
-        def getSumOfValues: Long = {
-            map.values.sum
+            output.write("NaiveBayes;label=" + lambda + ";")
+            saveMetricsToFile(model, testDataSet)
+            output.write(";" + resultTime)
+            output.write("\n")
         }
     }
 
+    private def logisticRegression(trainDataSet: RDD[LabeledPoint], testDataSet: RDD[LabeledPoint], categories: Int, parameters: Seq[(Int, Double)]) = {
+        for (parameter <- parameters) {
+            var model: LogisticRegressionModel = null
+            val resultTime = time {
+                val modelSettings = new LogisticRegressionWithLBFGS()
+                        .setNumClasses(categories)
+                modelSettings.optimizer.setNumIterations(parameter._1)
+                modelSettings.optimizer.setRegParam(parameter._2)
+
+                model = modelSettings.run(trainDataSet)
+            }
+
+            output.write("LogisticRegressionWithLBFGS;numberOfIterations=" + parameter._1 + "|regularization=" + parameter._2 + ";")
+            saveMetricsToFile(model, testDataSet)
+            output.write(";" + resultTime)
+            output.write("\n")
+        }
+    }
+
+    private def saveMetricsToFile(model: ClassificationModel, testDataSet: RDD[LabeledPoint]) = {
+        val predictionAndLabel = testDataSet.map(p => (model.predict(p.features), p.label))
+        val metrics = new MulticlassMetrics(predictionAndLabel)
+
+        output.write(metrics.accuracy + ";"
+                + metrics.weightedFMeasure + ";"
+                + metrics.weightedPrecision + ";"
+                + metrics.weightedRecall + ";"
+                + metrics.weightedTruePositiveRate + ";"
+                + metrics.weightedFalsePositiveRate)
+    }
+
+    def createLabeledPointDataSet(dataSet: RDD[Advertisement], tfidf: Boolean): RDD[LabeledPoint] = {
+        val categories = dataSet
+                .map(advertisement => advertisement.category)
+
+        val tokens = dataSet
+                .map(advertisement => processTitle(advertisement.title))
+
+        val hashingTF = new HashingTF()
+        var tf = hashingTF.transform(tokens)
+
+        if (tfidf) {
+            val idf = new IDF().fit(tf)
+            tf = idf.transform(tf)
+        }
+
+        val zipped = categories.zip(tf)
+        val labelPointDataSet = zipped.map { case (category, vector) => LabeledPoint(category, vector) }
+        labelPointDataSet.cache
+
+        labelPointDataSet
+    }
 
     // znaczenie http://nkjp.pl/poliqarp/help/plse2.html
     // plik w morfeusz-sgjp.tagset w zrodlach (zawiera id tagow)
@@ -243,7 +157,7 @@ object Main extends java.io.Serializable {
     // comp - 99
     // brev - 97, 801
     // TODO moze przyslowki i przymiotniki tez wypierdolic?
-    def processTitle(title: String): Array[String] = {
+    def processTitle(title: String): Seq[String] = {
         var result: util.List[MorphInterpretation] = null
         this.synchronized {
             result = morfeusz.analyseAsList(title)
@@ -279,7 +193,7 @@ object Main extends java.io.Serializable {
         filteredResult
     }
 
-    def getFirstLemmaFromEveryNode(filteredResult: mutable.Buffer[MorphInterpretation]): Array[String] = {
+    def getFirstLemmaFromEveryNode(filteredResult: mutable.Buffer[MorphInterpretation]): Seq[String] = {
         var lemmas: Map[Int, String] = Map()
 
         filteredResult.foreach(morph => {
@@ -290,19 +204,7 @@ object Main extends java.io.Serializable {
             }
         })
 
-        lemmas.values.toArray
-    }
-
-    def saveInDatabase(bagOfWordsDS: Dataset[BagOfWords], advertisementDS: Dataset[Advertisement]): Unit = {
-        //        Class.forName("org.postgresql.Driver")
-        //        val connectionProperties = new Properties()
-        //        connectionProperties.put("user", "postgres")
-        //        connectionProperties.put("password", "postgres")
-
-        Class.forName("org.sqlite.JDBC")
-
-        advertisementDS.write.mode(SaveMode.Append).jdbc("jdbc:sqlite:data_ninja.db", "advertisement", new Properties())
-        //        bagOfWordsDS.write.jdbc("jdbc:postgresql://localhost:5432/data_ninja", "public.bag_of_words", connectionProperties)
+        lemmas.values.toSeq
     }
 
     def disableLogging(): Unit = {
@@ -310,11 +212,14 @@ object Main extends java.io.Serializable {
         Logger.getLogger("akka").setLevel(Level.OFF)
     }
 
-    def time[R](block: => R): R = {
+    def time[R](block: => R): Double = {
         val t0 = System.nanoTime()
-        val result = block // call-by-name
+        val result = block
+        // call-by-name
         val t1 = System.nanoTime()
-        println("Elapsed time: " + (t1 - t0) + "ns")
-        result
+        //        println("Elapsed time: " + (t1 - t0) + "ns")
+        //        result
+
+        (t1 - t0) / 1000000000d
     }
 }
