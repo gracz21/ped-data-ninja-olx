@@ -1,5 +1,6 @@
-import java.time.LocalDateTime
+import java.text.SimpleDateFormat
 import java.util
+import java.util.Date
 
 import org.apache.log4j.{Level, Logger}
 import org.apache.spark.mllib.classification._
@@ -16,7 +17,7 @@ import scalax.io.{Output, Resource}
 case class Advertisement(title: String, category: Long)
 
 object Main extends java.io.Serializable {
-    val output: Output = Resource.fromFile("results/result_" + LocalDateTime.now().toString)
+  val output: Output = Resource.fromFile("results/result_" + new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss-SSS").format(new Date()))
 
     //    disableLogging()
 
