@@ -34,9 +34,20 @@ object Main extends java.io.Serializable {
     def main(args: Array[String]): Unit = {
         disableLogging()
 
+        val categoriesFile = sc.textFile("data/categories.tsv")
         //        val data = sc.textFile("data/test.tsv")
-                val data = sc.textFile("data/training.[0-9]*.tsv")
+        val data = sc.textFile("data/training.[0-9]*.tsv")
 //        val data = sc.textFile("data/training.0001.tsv")
+        val categoriesHierarchyMap = categoriesFile
+          .zipWithIndex().filter((tuple: (String, Long)) => tuple._2 > 1)
+          .map(string => string._1.split("\t"))
+          .map(
+              stringArray => (stringArray(0).toInt, stringArray(1).toInt)
+          )
+          .collectAsMap()
+        val categories = categoriesHierarchyMap.keySet.toArray.sorted
+
+        val errorMatrix = createErrorMatrix(categoriesHierarchyMap, categories)
 
         val categoriesMap = data
                 .map(string => string.split("\t"))
@@ -52,6 +63,43 @@ object Main extends java.io.Serializable {
                 )
 
         splitDataAndExecute(convertedData, categoriesMap.size, Seq(Array(0.6, 0.4)))
+    }
+
+    private def createErrorMatrix(categoriesHierarchyMap: Map[Int, Int], categories: Array[Int]): Array[Array[Int]] = {
+        val errorMatrix = Array.ofDim[Int](categoriesHierarchyMap.size, categoriesHierarchyMap.size)
+
+        categories.foreach(
+            category => {
+                val idx1 = categories.indexOf(category)
+                errorMatrix(idx1)(idx1) = 0
+                var path = Array.empty[Int]
+                var currentCategory = category
+
+                //Generate path from "predicted" category to root
+                path = path :+ currentCategory
+                while(categoriesHierarchyMap(currentCategory) != 0) {
+                    path = path :+ currentCategory
+                    currentCategory = categoriesHierarchyMap(currentCategory)
+                }
+                path = path :+ 0
+
+                //Find start of common part with path from "predicted" category to root
+                categories.filter(int => int != category).foreach(
+                    correctCategory => {
+                        val idx2 = categories.indexOf(correctCategory)
+                        var errorValue = 0
+                        var currentCategory2 = correctCategory
+                        while(!path.contains(currentCategory2)) {
+                            errorValue += 1
+                            currentCategory2 = categoriesHierarchyMap(currentCategory2)
+                        }
+                        errorValue += path.indexOf(currentCategory2)*2
+                        errorMatrix(idx1)(idx2) = errorValue
+                    }
+                )
+            }
+        )
+        errorMatrix
     }
 
     private def splitDataAndExecute(convertedData: RDD[Advertisement], categories: Int, splits: Seq[Array[Double]]) = {
