@@ -49,6 +49,8 @@ object Main extends java.io.Serializable {
         val categories = categoriesHierarchyMap.keySet.toArray.sorted
 
         val errorMatrix = createErrorMatrix(categoriesHierarchyMap, categories)
+        val frequencies = createFrequencyList(data, categoriesHierarchyMap, categories)
+        val frequenciesWithWeight = calculateWeightList(errorMatrix, frequencies)
 
         val categoriesMap = data
                 .map(string => string.split("\t"))
@@ -64,6 +66,37 @@ object Main extends java.io.Serializable {
                 )
 
         splitDataAndExecute(convertedData, categoriesMap.size, Seq(Array(0.6, 0.4)))
+    }
+
+    private def createFrequencyList(data: RDD[String], categoriesHierarchyMap: Map[Int, Int], categories: Array[Int]): Array[Double] = {
+        val frequencyList = Array.ofDim[Int](categoriesHierarchyMap.size)
+
+        val dataCategories = data
+          .map(string => string.split("\t"))
+          .map(stringArray => stringArray.last.toInt)
+          .collect()
+
+        dataCategories
+          .foreach(category => {
+              var currentCategory = -1
+              do {
+                  if (currentCategory == -1)
+                      currentCategory = category
+                  else
+                      currentCategory = categoriesHierarchyMap(currentCategory)
+
+                  frequencyList(categories.indexOf(currentCategory)) += 1
+              } while (categoriesHierarchyMap(currentCategory) != 0)
+          })
+
+        frequencyList
+          .map(value => value.toDouble / dataCategories.length)
+    }
+
+    private def calculateWeightList(errorMatrix: Array[Array[Int]], frequencyList: Array[Double]): Array[Double] = {
+        frequencyList
+          .zipWithIndex
+          .map(row => row._1 * errorMatrix(row._2).length / errorMatrix(row._2).sum)
     }
 
     private def createErrorMatrix(categoriesHierarchyMap: Map[Int, Int], categories: Array[Int]): Array[Array[Int]] = {
