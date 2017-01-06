@@ -1,10 +1,12 @@
-import java.time.LocalDateTime
+import java.text.SimpleDateFormat
 import java.util
+import java.util.Date
 
 import org.apache.log4j.{Level, Logger}
 import org.apache.spark.mllib.classification._
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
 import org.apache.spark.mllib.feature.{HashingTF, IDF}
+import org.apache.spark.mllib.linalg.{SparseVector => SV}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
@@ -13,17 +15,31 @@ import pl.sgjp.morfeusz.{Morfeusz, MorfeuszUsage, MorphInterpretation}
 import scala.collection.{JavaConversions, Map, mutable}
 import scalax.io.{Output, Resource}
 
-case class Advertisement(title: String, category: Long)
+case class Advertisement(title: String, categories: Seq[Long])
 
 object Main extends java.io.Serializable {
-    val output: Output = Resource.fromFile("results/result_" + LocalDateTime.now().toString)
+    val output: Output = Resource.fromFile("results/result_" + new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss-SSS").format(new Date()))
 
     //    disableLogging()
 
-    val sparkSession = SparkSession.builder.
-            master("local[*]")
+    val sparkSession = SparkSession.builder
+            .master("local[*]")
             .appName("NinjaCosTam")
-            .config("spark.executor.memory", "6g")
+            .config("spark.executor.memory", "32g")
+            .config("spark.driver.memory", "32g")
+            .config("spark.driver.host", "127.0.0.1")
+            .config("spark.driver.port", "36485")
+            //                                    .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+            //                        .config("spark.kryoserializer.buffer.max.mb", "2047m")
+            .config("spark.default.parallelism", "12")
+            //            .config("spark.cores.max", "56")
+            //            .config("spark.storage.memoryFraction", "0.7")
+            //            .config("spark.io.compression.codec", "lzf")
+            //            .config("spark.shuffle.consolidateFiles", "true")
+            //            .config("spark.shuffle.service.enabled", "true")
+            //            .config("spark.rdd.compress", "true")
+            .config("spark.memory.fraction", "1")
+            .config("spark.storage.memoryFraction", "0.1")
             .getOrCreate()
     val sc = sparkSession.sparkContext
 
@@ -34,44 +50,145 @@ object Main extends java.io.Serializable {
     def main(args: Array[String]): Unit = {
         disableLogging()
 
-        //        val data = sc.textFile("data/test.tsv")
-                val data = sc.textFile("data/training.[0-9]*.tsv")
-//        val data = sc.textFile("data/training.0001.tsv")
+        val data = sc.textFile("data/training.[0-9]*.tsv")
 
-        val categoriesMap = data
-                .map(string => string.split("\t"))
-                .map(stringArray => stringArray(4).toInt)
-                .distinct()
-                .zipWithIndex()
-                .collectAsMap()
+        //        val categoriesFile = sc.textFile("data/categories.tsv")
+        //        val data = sc.textFile("data/test.tsv")
+//        val data = sc.textFile("data/training.0001.tsv")
+        //        val categoriesHierarchyMap = categoriesFile
+        //                .zipWithIndex().filter((tuple: (String, Long)) => tuple._2 > 1)
+        //                .map(string => string._1.split("\t"))
+        //                .map(
+        //                    stringArray => (stringArray(0).toInt, stringArray(1).toInt)
+        //                )
+        //                .collectAsMap()
+        //        val categories = categoriesHierarchyMap.keySet.toArray.sorted
+
+        //        val errorMatrix = createErrorMatrix(categoriesHierarchyMap, categories)
+        //        val frequencies = createFrequencyList(data, categoriesHierarchyMap, categories)
+        //        val frequenciesWithWeight = calculateWeightList(errorMatrix, frequencies)
+
+        val categoriesMap = Map(
+            0 -> createCategoryMap(data, 0),
+            1 -> createCategoryMap(data, 1),
+            2 -> createCategoryMap(data, 2)
+        )
 
         val convertedData = data
                 .map(string => string.split("\t"))
+                .filter(stringArray => stringArray.length == 7)
+                .filter(stringArray => !stringArray(5).isEmpty) // 4
                 .map(stringArray =>
-                    Advertisement(stringArray(1), categoriesMap(stringArray(4).toInt))
+            Advertisement(
+                stringArray(1),
+                Seq(
+                    categoriesMap(0)(stringArray(4).toInt),
+                    categoriesMap(1)(stringArray(5).toInt),
+                    categoriesMap(2)(stringArray(6).toInt)
                 )
+            )
+        )
 
-        splitDataAndExecute(convertedData, categoriesMap.size, Seq(Array(0.6, 0.4)))
+        val Array(training, test) = convertedData.randomSplit(Array(0.6, 0.4), 44)
+        executeAllCategories(training, test, categoriesMap)
     }
 
-    private def splitDataAndExecute(convertedData: RDD[Advertisement], categories: Int, splits: Seq[Array[Double]]) = {
-        for (split <- splits) {
-            output.write("Train=" + split(0) + ";Test=" + split(1) + "\n")
-            val Array(training, test) = convertedData.randomSplit(split, 44)
+    private def createCategoryMap(data: RDD[String], category: Int) = {
+        data
+                .map(string => string.split("\t"))
+                .filter(stringArray => stringArray.length == 7)
+                .filter(stringArray => !stringArray(4 + category).isEmpty)
+                .map(stringArray => stringArray(4 + category).toInt)
+                .distinct()
+                .zipWithIndex()
+                .collectAsMap()
+    }
 
-            output.write("With TFIDF:\n")
-            execute(training, test, categories, tfidf = true)
-            output.write("Without TFIDF:\n")
-            execute(training, test, categories, tfidf = false)
+    private def createFrequencyList(data: RDD[String], categoriesHierarchyMap: Map[Int, Int], categories: Array[Int]): Array[Double] = {
+        val frequencyList = Array.ofDim[Int](categoriesHierarchyMap.size)
+
+        val dataCategories = data
+                .map(string => string.split("\t"))
+                .map(stringArray => stringArray.last.toInt)
+                .collect()
+
+        dataCategories
+                .foreach(category => {
+                    var currentCategory = -1
+                    do {
+                        if (currentCategory == -1)
+                            currentCategory = category
+                        else
+                            currentCategory = categoriesHierarchyMap(currentCategory)
+
+                        frequencyList(categories.indexOf(currentCategory)) += 1
+                    } while (categoriesHierarchyMap(currentCategory) != 0)
+                })
+
+        frequencyList
+                .map(value => value.toDouble / dataCategories.length)
+    }
+
+    private def calculateWeightList(errorMatrix: Array[Array[Int]], frequencyList: Array[Double]): Array[Double] = {
+        frequencyList
+                .zipWithIndex
+                .map(row => row._1 * errorMatrix(row._2).length / errorMatrix(row._2).sum)
+    }
+
+    private def createErrorMatrix(categoriesHierarchyMap: Map[Int, Int], categories: Array[Int]): Array[Array[Int]] = {
+        val errorMatrix = Array.ofDim[Int](categoriesHierarchyMap.size, categoriesHierarchyMap.size)
+
+        categories.foreach(
+            category => {
+                val idx1 = categories.indexOf(category)
+                errorMatrix(idx1)(idx1) = 0
+                var path = Array.empty[Int]
+                var currentCategory = category
+
+                //Generate path from "predicted" category to root
+                path = path :+ currentCategory
+                while (categoriesHierarchyMap(currentCategory) != 0) {
+                    path = path :+ currentCategory
+                    currentCategory = categoriesHierarchyMap(currentCategory)
+                }
+                path = path :+ 0
+
+                //Find start of common part with path from "predicted" category to root
+                categories.filter(int => int != category).foreach(
+                    correctCategory => {
+                        val idx2 = categories.indexOf(correctCategory)
+                        var errorValue = 0
+                        var currentCategory2 = correctCategory
+                        while (!path.contains(currentCategory2)) {
+                            errorValue += 1
+                            currentCategory2 = categoriesHierarchyMap(currentCategory2)
+                        }
+                        errorValue += path.indexOf(currentCategory2) * 2
+                        errorMatrix(idx1)(idx2) = errorValue
+                    }
+                )
+            }
+        )
+        errorMatrix
+    }
+
+    private def executeAllCategories(training: RDD[Advertisement], test: RDD[Advertisement], categoriesMap: Map[Int, Map[Int, Long]]) = {
+        for (categoryIndex <- Seq(0, 1, 2)) {
+            output.write(s"Category: $categoryIndex\n")
+            output.write("With TF-IDF\n")
+            execute(training, test, categoryIndex, categoriesMap(categoryIndex).size, tfidf = true)
+            //
+            //            output.write("Without TFIDF:\n")
+            //            execute(training, test, categoryIndex, categoriesMap(categoryIndex).size, tfidf = false)
         }
     }
 
-    private def execute(training: RDD[Advertisement], test: RDD[Advertisement], categories: Int, tfidf: Boolean) = {
-        val trainDataSet = createLabeledPointDataSet(training, tfidf)
-        val testDataSet = createLabeledPointDataSet(test, tfidf)
+    private def execute(training: RDD[Advertisement], test: RDD[Advertisement], categoryIndex: Int, categoriesSize: Int, tfidf: Boolean) = {
+        val trainDataSet = createLabeledPointDataSet(training, categoryIndex, tfidf)
+        val testDataSet = createLabeledPointDataSet(test, categoryIndex, tfidf)
 
-        naiveBayes(trainDataSet, testDataSet, Seq(0.1, 0.2, 0.3))
-        logisticRegression(trainDataSet, testDataSet, categories, Seq((10, 0.01)))
+        //        naiveBayes(trainDataSet, testDataSet, Seq(0.1))
+        logisticRegression(trainDataSet, testDataSet, categoriesSize, Seq((10, 0.01)))
     }
 
     private def naiveBayes(trainDataSet: RDD[LabeledPoint], testDataSet: RDD[LabeledPoint], lambdas: Seq[Double]) = {
@@ -88,16 +205,17 @@ object Main extends java.io.Serializable {
         }
     }
 
-    private def logisticRegression(trainDataSet: RDD[LabeledPoint], testDataSet: RDD[LabeledPoint], categories: Int, parameters: Seq[(Int, Double)]) = {
+    private def logisticRegression(trainDataSet: RDD[LabeledPoint], testDataSet: RDD[LabeledPoint], categoriesSize: Int, parameters: Seq[(Int, Double)]) = {
         for (parameter <- parameters) {
             var model: LogisticRegressionModel = null
             val resultTime = time {
                 val modelSettings = new LogisticRegressionWithLBFGS()
-                        .setNumClasses(categories)
+                        .setNumClasses(categoriesSize)
                 modelSettings.optimizer.setNumIterations(parameter._1)
                 modelSettings.optimizer.setRegParam(parameter._2)
 
                 model = modelSettings.run(trainDataSet)
+                //                model.save(sc)
             }
 
             output.write("LogisticRegressionWithLBFGS;numberOfIterations=" + parameter._1 + "|regularization=" + parameter._2 + ";")
@@ -119,14 +237,28 @@ object Main extends java.io.Serializable {
                 + metrics.weightedFalsePositiveRate)
     }
 
-    def createLabeledPointDataSet(dataSet: RDD[Advertisement], tfidf: Boolean): RDD[LabeledPoint] = {
+    def createLabeledPointDataSet(dataSet: RDD[Advertisement], categoryIndex: Int, tfidf: Boolean): RDD[LabeledPoint] = {
         val categories = dataSet
-                .map(advertisement => advertisement.category)
+                .map(advertisement => advertisement.categories(categoryIndex))
 
         val tokens = dataSet
                 .map(advertisement => processTitle(advertisement.title))
 
-        val hashingTF = new HashingTF()
+        //        val hashingTF = new HashingTF(524288)
+        //        val hashingTF = new HashingTF(1024 * 100) // 2 kateogira Bayess
+        //        val hashingTF = new HashingTF(1024 * 50) // 3 kateogira Bayess
+
+        var hashingTF: HashingTF = null
+        categoryIndex match {
+            case 0 => hashingTF = new HashingTF()
+            case 1 => hashingTF = new HashingTF(1024 * 100)
+            case 2 => hashingTF = new HashingTF(1024 * 60)
+        }
+        // 1 kategoria Regression
+        //        val hashingTF = new HashingTF(1024 * 100)// 2 kategoria Regression
+        //        val hashingTF = new HashingTF(1024 * 60) // 3 kategoria Regression
+        //2 kategoria
+        //        val hashingTF = new HashingTF(524288/2)
         var tf = hashingTF.transform(tokens)
 
         if (tfidf) {
@@ -136,7 +268,7 @@ object Main extends java.io.Serializable {
 
         val zipped = categories.zip(tf)
         val labelPointDataSet = zipped.map { case (category, vector) => LabeledPoint(category, vector) }
-        labelPointDataSet.cache
+        //        labelPointDataSet.cache
 
         labelPointDataSet
     }
