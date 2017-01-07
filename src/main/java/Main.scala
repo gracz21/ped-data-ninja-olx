@@ -6,7 +6,7 @@ import org.apache.log4j.{Level, Logger}
 import org.apache.spark.mllib.classification._
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
 import org.apache.spark.mllib.feature.{HashingTF, IDF}
-import org.apache.spark.mllib.linalg.{SparseVector => SV}
+import org.apache.spark.mllib.linalg.{DenseVector, Vector, SparseVector => SV}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
@@ -15,7 +15,7 @@ import pl.sgjp.morfeusz.{Morfeusz, MorfeuszUsage, MorphInterpretation}
 import scala.collection.{JavaConversions, Map, mutable}
 import scalax.io.{Output, Resource}
 
-case class Advertisement(title: String, categories: Seq[Long])
+case class Advertisement(id: Long, title: String, categories: Seq[Long])
 
 object Main extends java.io.Serializable {
     val output: Output = Resource.fromFile("results/result_" + new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss-SSS").format(new Date()))
@@ -52,21 +52,19 @@ object Main extends java.io.Serializable {
 
         val data = sc.textFile("data/training.[0-9]*.tsv")
 
-        //        val categoriesFile = sc.textFile("data/categories.tsv")
-        //        val data = sc.textFile("data/test.tsv")
-//        val data = sc.textFile("data/training.0001.tsv")
-        //        val categoriesHierarchyMap = categoriesFile
-        //                .zipWithIndex().filter((tuple: (String, Long)) => tuple._2 > 1)
-        //                .map(string => string._1.split("\t"))
-        //                .map(
-        //                    stringArray => (stringArray(0).toInt, stringArray(1).toInt)
-        //                )
-        //                .collectAsMap()
-        //        val categories = categoriesHierarchyMap.keySet.toArray.sorted
+        val categoriesFile = sc.textFile("data/categories.tsv")
+        val categoriesHierarchyMap = categoriesFile
+                .zipWithIndex().filter((tuple: (String, Long)) => tuple._2 > 1)
+                .map(string => string._1.split("\t"))
+                .map(
+                    stringArray => (stringArray(0).toInt, stringArray(1).toInt)
+                )
+                .collectAsMap()
+        val categories = categoriesHierarchyMap.keySet.toArray.sorted
 
-        //        val errorMatrix = createErrorMatrix(categoriesHierarchyMap, categories)
-        //        val frequencies = createFrequencyList(data, categoriesHierarchyMap, categories)
-        //        val frequenciesWithWeight = calculateWeightList(errorMatrix, frequencies)
+        val errorMatrix = createErrorMatrix(categoriesHierarchyMap, categories)
+        val frequencies = createFrequencyList(data, categoriesHierarchyMap, categories)
+        val frequenciesWithWeight = calculateWeightList(errorMatrix, frequencies)
 
         val categoriesMap = Map(
             0 -> createCategoryMap(data, 0),
@@ -80,6 +78,7 @@ object Main extends java.io.Serializable {
                 .filter(stringArray => !stringArray(5).isEmpty) // 4
                 .map(stringArray =>
             Advertisement(
+                stringArray(0).toLong,
                 stringArray(1),
                 Seq(
                     categoriesMap(0)(stringArray(4).toInt),
@@ -90,7 +89,7 @@ object Main extends java.io.Serializable {
         )
 
         val Array(training, test) = convertedData.randomSplit(Array(0.6, 0.4), 44)
-        executeAllCategories(training, test, categoriesMap)
+        executeForAllCategories(training, test, categoriesMap)
     }
 
     private def createCategoryMap(data: RDD[String], category: Int) = {
@@ -101,6 +100,7 @@ object Main extends java.io.Serializable {
                 .map(stringArray => stringArray(4 + category).toInt)
                 .distinct()
                 .zipWithIndex()
+                //                .map(x => (x._1, x._2 + 1))
                 .collectAsMap()
     }
 
@@ -172,57 +172,55 @@ object Main extends java.io.Serializable {
         errorMatrix
     }
 
-    private def executeAllCategories(training: RDD[Advertisement], test: RDD[Advertisement], categoriesMap: Map[Int, Map[Int, Long]]) = {
-        for (categoryIndex <- Seq(0, 1, 2)) {
-            output.write(s"Category: $categoryIndex\n")
-            output.write("With TF-IDF\n")
-            execute(training, test, categoryIndex, categoriesMap(categoryIndex).size, tfidf = true)
-            //
-            //            output.write("Without TFIDF:\n")
-            //            execute(training, test, categoryIndex, categoriesMap(categoryIndex).size, tfidf = false)
+
+    private def executeForAllCategories(training: RDD[Advertisement], test: RDD[Advertisement], categoriesMap: Map[Int, Map[Int, Long]]) = {
+        val maps = scala.collection.mutable.Map[Int, RDD[(Long, Double, Double)]]()
+
+        val categories = Seq(0, 1, 2)
+
+        for (categoryIndex <- categories) {
+            maps.put(
+                categoryIndex,
+                execute(training, test, categoryIndex, categoriesMap(categoryIndex).size, tfidf = true)
+            )
         }
+
+        for (categoryIndex <- categories) {
+            println(calculateAccuracy(maps(categoryIndex)))
+        }
+    }
+
+    def calculateAccuracy(rdd: RDD[(Long, Double, Double)]): Double = {
+        val accuracy = rdd.filter(x => x._2 == x._3).count().toDouble / rdd.count()
+        accuracy
     }
 
     private def execute(training: RDD[Advertisement], test: RDD[Advertisement], categoryIndex: Int, categoriesSize: Int, tfidf: Boolean) = {
         val trainDataSet = createLabeledPointDataSet(training, categoryIndex, tfidf)
         val testDataSet = createLabeledPointDataSet(test, categoryIndex, tfidf)
 
-        //        naiveBayes(trainDataSet, testDataSet, Seq(0.1))
-        logisticRegression(trainDataSet, testDataSet, categoriesSize, Seq((10, 0.01)))
+        val model = logisticRegression(trainDataSet, testDataSet, categoriesSize, (10, 0.01))
+
+        val zipped = test.zip(testDataSet)
+        val mapped = zipped.map(zip => (zip._1.id, model.predict(zip._2.features), zip._2.label))
+
+        mapped
     }
 
-    private def naiveBayes(trainDataSet: RDD[LabeledPoint], testDataSet: RDD[LabeledPoint], lambdas: Seq[Double]) = {
-        for (lambda <- lambdas) {
-            var model: NaiveBayesModel = null
-            val resultTime = time {
-                model = NaiveBayes.train(trainDataSet, lambda = lambda)
-            }
+    private def logisticRegression(trainDataSet: RDD[LabeledPoint], testDataSet: RDD[LabeledPoint], categoriesSize: Int, parameter: (Int, Double)) = {
+        var model: LogisticRegressionModel = null
+        val resultTime = time {
+            val modelSettings = new LogisticRegressionWithLBFGS()
+                    .setNumClasses(categoriesSize)
+            modelSettings.optimizer.setNumIterations(parameter._1)
+            modelSettings.optimizer.setRegParam(parameter._2)
 
-            output.write("NaiveBayes;label=" + lambda + ";")
-            saveMetricsToFile(model, testDataSet)
-            output.write(";" + resultTime)
-            output.write("\n")
+//                                    model = modelSettings.run(trainDataSet)
+//                                                            model.save(sc, s"logistic_regression_${categoriesSize}_${parameter._1}_${parameter._2}")
+            model = LogisticRegressionModel.load(sc, s"model/logistic_regression_${categoriesSize}_${parameter._1}_${parameter._2}")
         }
-    }
 
-    private def logisticRegression(trainDataSet: RDD[LabeledPoint], testDataSet: RDD[LabeledPoint], categoriesSize: Int, parameters: Seq[(Int, Double)]) = {
-        for (parameter <- parameters) {
-            var model: LogisticRegressionModel = null
-            val resultTime = time {
-                val modelSettings = new LogisticRegressionWithLBFGS()
-                        .setNumClasses(categoriesSize)
-                modelSettings.optimizer.setNumIterations(parameter._1)
-                modelSettings.optimizer.setRegParam(parameter._2)
-
-                model = modelSettings.run(trainDataSet)
-                //                model.save(sc)
-            }
-
-            output.write("LogisticRegressionWithLBFGS;numberOfIterations=" + parameter._1 + "|regularization=" + parameter._2 + ";")
-            saveMetricsToFile(model, testDataSet)
-            output.write(";" + resultTime)
-            output.write("\n")
-        }
+        model
     }
 
     private def saveMetricsToFile(model: ClassificationModel, testDataSet: RDD[LabeledPoint]) = {
@@ -353,5 +351,39 @@ object Main extends java.io.Serializable {
         //        result
 
         (t1 - t0) / 1000000000d
+    }
+
+    object ClassificationUtility {
+        def predictPoint(dataMatrix: Vector, model: LogisticRegressionModel) = {
+            require(dataMatrix.size == model.numFeatures)
+            val dataWithBiasSize: Int = model.weights.size / (model.numClasses - 1)
+            val weightsArray: Array[Double] = model.weights match {
+                case dv: DenseVector => dv.values
+                case _ =>
+                    throw new IllegalArgumentException(
+                        s"weights only supports dense vector but got type ${model.weights.getClass}.")
+            }
+            var bestClass = 0
+            var maxMargin = 0.0
+            val withBias = dataMatrix.size + 1 == dataWithBiasSize
+            val classProbabilities: Array[Double] = new Array[Double](model.numClasses)
+            (0 until model.numClasses - 1).foreach { i =>
+                var margin = 0.0
+                dataMatrix.foreachActive { (index, value) =>
+                    if (value != 0.0) margin += value * weightsArray((i * dataWithBiasSize) + index)
+                }
+                // Intercept is required to be added into margin.
+                if (withBias) {
+                    margin += weightsArray((i * dataWithBiasSize) + dataMatrix.size)
+                }
+                if (margin > maxMargin) {
+                    maxMargin = margin
+                    bestClass = i + 1
+                }
+                classProbabilities(i + 1) = 1.0 / (1.0 + Math.exp(-(maxMargin - margin)))
+            }
+
+            (bestClass, classProbabilities(bestClass))
+        }
     }
 }
