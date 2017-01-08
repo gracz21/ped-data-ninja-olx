@@ -229,9 +229,9 @@ object Main extends java.io.Serializable {
             modelSettings.optimizer.setNumIterations(parameter._1)
             modelSettings.optimizer.setRegParam(parameter._2)
 
-            model = modelSettings.run(trainDataSet)
-            model.save(sc, s"logistic_regression_${categoriesSize}_${parameter._1}_${parameter._2}")
-//            model = LogisticRegressionModel.load(sc, s"model/logistic_regression_${categoriesSize}_${parameter._1}_${parameter._2}")
+//            model = modelSettings.run(trainDataSet)
+//            model.save(sc, s"model/logistic_regression_${categoriesSize}_${parameter._1}_${parameter._2}")
+            model = LogisticRegressionModel.load(sc, s"model/logistic_regression_${categoriesSize}_${parameter._1}_${parameter._2}")
         }
 
         model
