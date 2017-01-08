@@ -66,12 +66,15 @@ object Main extends java.io.Serializable {
         val frequencies = createFrequencyList(data, categoriesHierarchyMap, categories)
         val frequenciesWithWeight = calculateWeightList(errorMatrix, frequencies)
 
-        val categoriesMap = Map(
+        val allCategoriesMap = categories
+                .zipWithIndex
+                .toMap
+
+        val modelCategoriesMap = Map(
             0 -> createCategoryMap(data, 0),
             1 -> createCategoryMap(data, 1),
             2 -> createCategoryMap(data, 2)
         )
-
         val convertedData = data
                 .map(string => string.split("\t"))
                 .filter(stringArray => stringArray.length == 7)
@@ -81,15 +84,15 @@ object Main extends java.io.Serializable {
                 stringArray(0).toLong,
                 stringArray(1),
                 Seq(
-                    categoriesMap(0)(stringArray(4).toInt),
-                    categoriesMap(1)(stringArray(5).toInt),
-                    categoriesMap(2)(stringArray(6).toInt)
+                    modelCategoriesMap(0)(stringArray(4).toInt),
+                    modelCategoriesMap(1)(stringArray(5).toInt),
+                    modelCategoriesMap(2)(stringArray(6).toInt)
                 )
             )
         )
 
         val Array(training, test) = convertedData.randomSplit(Array(0.6, 0.4), 44)
-        executeForAllCategories(training, test, categoriesMap)
+        executeForAllCategories(training, test, allCategoriesMap, modelCategoriesMap, errorMatrix)
     }
 
     private def createCategoryMap(data: RDD[String], category: Int) = {
@@ -100,7 +103,6 @@ object Main extends java.io.Serializable {
                 .map(stringArray => stringArray(4 + category).toInt)
                 .distinct()
                 .zipWithIndex()
-                //                .map(x => (x._1, x._2 + 1))
                 .collectAsMap()
     }
 
@@ -172,22 +174,34 @@ object Main extends java.io.Serializable {
         errorMatrix
     }
 
+    private def executeForAllCategories(training: RDD[Advertisement], test: RDD[Advertisement], allCategoriesMap: Map[Int, Int], modelCategoriesMap: Map[Int, Map[Int, Long]], errorMatrix: Array[Array[Int]]) = {
+        val modelMap = scala.collection.mutable.Map[Int, RDD[(Long, Double, Double)]]()
 
-    private def executeForAllCategories(training: RDD[Advertisement], test: RDD[Advertisement], categoriesMap: Map[Int, Map[Int, Long]]) = {
-        val maps = scala.collection.mutable.Map[Int, RDD[(Long, Double, Double)]]()
-
+        //        val categories = Seq(0)
         val categories = Seq(0, 1, 2)
 
         for (categoryIndex <- categories) {
-            maps.put(
+            modelMap.put(
                 categoryIndex,
-                execute(training, test, categoryIndex, categoriesMap(categoryIndex).size, tfidf = true)
+                execute(training, test, categoryIndex, modelCategoriesMap(categoryIndex).size, tfidf = true)
             )
         }
 
         for (categoryIndex <- categories) {
-            println(calculateAccuracy(maps(categoryIndex)))
+            val model = modelMap(categoryIndex)
+
+            val errorSum = model.filter(x => x._2 != x._3)
+                    .map(tuple =>
+                        errorMatrix(getCategoryIndexInErrorMatrix(allCategoriesMap, modelCategoriesMap, categoryIndex, tuple._2))(getCategoryIndexInErrorMatrix(allCategoriesMap, modelCategoriesMap, categoryIndex, tuple._3))
+                    )
+                    .sum() / test.count()
+
+            println(errorSum)
         }
+    }
+
+    private def getCategoryIndexInErrorMatrix(allCategoriesMap: Map[Int, Int], modelCategoriesMap: Map[Int, Map[Int, Long]], categoryIndex: Int, category: Double) = {
+        allCategoriesMap(modelCategoriesMap(categoryIndex).map(_.swap).get(category.toInt).get)
     }
 
     def calculateAccuracy(rdd: RDD[(Long, Double, Double)]): Double = {
@@ -215,9 +229,9 @@ object Main extends java.io.Serializable {
             modelSettings.optimizer.setNumIterations(parameter._1)
             modelSettings.optimizer.setRegParam(parameter._2)
 
-//                                    model = modelSettings.run(trainDataSet)
-//                                                            model.save(sc, s"logistic_regression_${categoriesSize}_${parameter._1}_${parameter._2}")
-            model = LogisticRegressionModel.load(sc, s"model/logistic_regression_${categoriesSize}_${parameter._1}_${parameter._2}")
+            model = modelSettings.run(trainDataSet)
+            model.save(sc, s"logistic_regression_${categoriesSize}_${parameter._1}_${parameter._2}")
+//            model = LogisticRegressionModel.load(sc, s"model/logistic_regression_${categoriesSize}_${parameter._1}_${parameter._2}")
         }
 
         model
