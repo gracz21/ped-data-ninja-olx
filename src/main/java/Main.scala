@@ -51,6 +51,7 @@ object Main extends java.io.Serializable {
         disableLogging()
 
         val data = sc.textFile("data/training.[0-9]*.tsv")
+//        val data = sc.textFile("data/test.tsv")
 
         val categoriesFile = sc.textFile("data/categories.tsv")
         val categoriesHierarchyMap = categoriesFile
@@ -62,23 +63,20 @@ object Main extends java.io.Serializable {
                 .collectAsMap()
         val categories = categoriesHierarchyMap.keySet.toArray.sorted
 
-        val errorMatrix = createErrorMatrix(categoriesHierarchyMap, categories)
-        val frequencies = createFrequencyList(data, categoriesHierarchyMap, categories)
-        val frequenciesWithWeight = calculateWeightList(errorMatrix, frequencies)
-
         val allCategoriesMap = categories
                 .zipWithIndex
                 .toMap
 
         val modelCategoriesMap = Map(
             0 -> createCategoryMap(data, 0),
-            1 -> createCategoryMap(data, 1),
-            2 -> createCategoryMap(data, 2)
+            1 -> createCategoryMap(data, 1)
+            //            2 -> createCategoryMap(data, 2)
         )
         val convertedData = data
                 .map(string => string.split("\t"))
-                .filter(stringArray => stringArray.length == 7)
-                .filter(stringArray => !stringArray(5).isEmpty) // 4
+                //                .filter(stringArray => stringArray.length == 7)
+                //                .filter(stringArray => !stringArray(5).isEmpty)
+                .filter(stringArray => stringArray(4) == "87")
                 .map(stringArray =>
             Advertisement(
                 stringArray(0).toLong,
@@ -86,117 +84,43 @@ object Main extends java.io.Serializable {
                 Seq(
                     modelCategoriesMap(0)(stringArray(4).toInt),
                     modelCategoriesMap(1)(stringArray(5).toInt),
-                    modelCategoriesMap(2)(stringArray(6).toInt)
+                    0
                 )
             )
         )
 
-        val Array(training, test) = convertedData.randomSplit(Array(0.6, 0.4), 44)
-        executeForAllCategories(training, test, allCategoriesMap, modelCategoriesMap, errorMatrix)
+        val conversd = convertedData.count()
+
+        executeForAllCategories(convertedData, allCategoriesMap, modelCategoriesMap)
     }
 
     private def createCategoryMap(data: RDD[String], category: Int) = {
         data
                 .map(string => string.split("\t"))
-                .filter(stringArray => stringArray.length == 7)
-                .filter(stringArray => !stringArray(4 + category).isEmpty)
+//                .filter(stringArray => stringArray.length == 7)
+//                .filter(stringArray => !stringArray(4 + category).isEmpty)
+                .filter(stringArray => stringArray(4) == "87")
                 .map(stringArray => stringArray(4 + category).toInt)
                 .distinct()
                 .zipWithIndex()
                 .collectAsMap()
     }
 
-    private def createFrequencyList(data: RDD[String], categoriesHierarchyMap: Map[Int, Int], categories: Array[Int]): Array[Double] = {
-        val frequencyList = Array.ofDim[Int](categoriesHierarchyMap.size)
-
-        val dataCategories = data
-                .map(string => string.split("\t"))
-                .map(stringArray => stringArray.last.toInt)
-                .collect()
-
-        dataCategories
-                .foreach(category => {
-                    var currentCategory = -1
-                    do {
-                        if (currentCategory == -1)
-                            currentCategory = category
-                        else
-                            currentCategory = categoriesHierarchyMap(currentCategory)
-
-                        frequencyList(categories.indexOf(currentCategory)) += 1
-                    } while (categoriesHierarchyMap(currentCategory) != 0)
-                })
-
-        frequencyList
-                .map(value => value.toDouble / dataCategories.length)
-    }
-
-    private def calculateWeightList(errorMatrix: Array[Array[Int]], frequencyList: Array[Double]): Array[Double] = {
-        frequencyList
-                .zipWithIndex
-                .map(row => row._1 * errorMatrix(row._2).length / errorMatrix(row._2).sum)
-    }
-
-    private def createErrorMatrix(categoriesHierarchyMap: Map[Int, Int], categories: Array[Int]): Array[Array[Int]] = {
-        val errorMatrix = Array.ofDim[Int](categoriesHierarchyMap.size, categoriesHierarchyMap.size)
-
-        categories.foreach(
-            category => {
-                val idx1 = categories.indexOf(category)
-                errorMatrix(idx1)(idx1) = 0
-                var path = Array.empty[Int]
-                var currentCategory = category
-
-                //Generate path from "predicted" category to root
-                path = path :+ currentCategory
-                while (categoriesHierarchyMap(currentCategory) != 0) {
-                    path = path :+ currentCategory
-                    currentCategory = categoriesHierarchyMap(currentCategory)
-                }
-                path = path :+ 0
-
-                //Find start of common part with path from "predicted" category to root
-                categories.filter(int => int != category).foreach(
-                    correctCategory => {
-                        val idx2 = categories.indexOf(correctCategory)
-                        var errorValue = 0
-                        var currentCategory2 = correctCategory
-                        while (!path.contains(currentCategory2)) {
-                            errorValue += 1
-                            currentCategory2 = categoriesHierarchyMap(currentCategory2)
-                        }
-                        errorValue += path.indexOf(currentCategory2) * 2
-                        errorMatrix(idx1)(idx2) = errorValue
-                    }
-                )
-            }
-        )
-        errorMatrix
-    }
-
-    private def executeForAllCategories(training: RDD[Advertisement], test: RDD[Advertisement], allCategoriesMap: Map[Int, Int], modelCategoriesMap: Map[Int, Map[Int, Long]], errorMatrix: Array[Array[Int]]) = {
+    private def executeForAllCategories(dataSet: RDD[Advertisement], allCategoriesMap: Map[Int, Int], modelCategoriesMap: Map[Int, Map[Int, Long]]) = {
         val modelMap = scala.collection.mutable.Map[Int, RDD[(Long, Double, Double)]]()
 
-        //        val categories = Seq(0)
-        val categories = Seq(0, 1, 2)
+//                val categories = Seq(0)
+        val categories = Seq(1)
 
         for (categoryIndex <- categories) {
             modelMap.put(
                 categoryIndex,
-                execute(training, test, categoryIndex, modelCategoriesMap(categoryIndex).size, tfidf = true)
+                execute(dataSet, categoryIndex, modelCategoriesMap(categoryIndex).size, tfidf = true)
             )
         }
 
         for (categoryIndex <- categories) {
-            val model = modelMap(categoryIndex)
-
-            val errorSum = model.filter(x => x._2 != x._3)
-                    .map(tuple =>
-                        errorMatrix(getCategoryIndexInErrorMatrix(allCategoriesMap, modelCategoriesMap, categoryIndex, tuple._2))(getCategoryIndexInErrorMatrix(allCategoriesMap, modelCategoriesMap, categoryIndex, tuple._3))
-                    )
-                    .sum() / test.count()
-
-            println(errorSum)
+            println(calculateAccuracy(modelMap(categoryIndex)))
         }
     }
 
@@ -209,14 +133,26 @@ object Main extends java.io.Serializable {
         accuracy
     }
 
-    private def execute(training: RDD[Advertisement], test: RDD[Advertisement], categoryIndex: Int, categoriesSize: Int, tfidf: Boolean) = {
-        val trainDataSet = createLabeledPointDataSet(training, categoryIndex, tfidf)
-        val testDataSet = createLabeledPointDataSet(test, categoryIndex, tfidf)
+    private def execute(dataSet: RDD[Advertisement], categoryIndex: Int, categoriesSize: Int, tfidf: Boolean) = {
+        val Array(trainDataSet, testDataSet) = dataSet.randomSplit(Array(0.6, 0.4), 44)
 
-        val model = logisticRegression(trainDataSet, testDataSet, categoriesSize, (10, 0.01))
+        val labeledDataSet = createLabeledPointDataSet(dataSet, categoryIndex, tfidf)
+        val Array(labeledTrainDataSet, labeledTestDataSet) = labeledDataSet.randomSplit(Array(0.6, 0.4), 44)
 
-        val zipped = test.zip(testDataSet)
+        val model = logisticRegression(labeledTrainDataSet, labeledTestDataSet, categoriesSize, (10, 0.01))
+
+        val zipped = trainDataSet.zip(labeledTrainDataSet)
         val mapped = zipped.map(zip => (zip._1.id, model.predict(zip._2.features), zip._2.label))
+
+//        val te = labeledTestDataSet.take(3)
+//        val asd = ClassificationUtility.predictPoint(te(0).features, model)
+//
+//        val asddd  = testDataSet.filter(asd => asd.id == 23)
+
+//        val ww = trainDataSet.collect().filter(asd => asd.id == 23)
+//        val asdadasdas = mapped.collect().filter(asd => asd._1 == 23)
+        val asdadasdas = zipped.collect().filter(asd => asd._1.id == 23)
+        ClassificationUtility.predictPoint(asdadasdas(0)._2.features, model)
 
         mapped
     }
@@ -231,7 +167,7 @@ object Main extends java.io.Serializable {
 
 //            model = modelSettings.run(trainDataSet)
 //            model.save(sc, s"model/logistic_regression_${categoriesSize}_${parameter._1}_${parameter._2}")
-            model = LogisticRegressionModel.load(sc, s"model/logistic_regression_${categoriesSize}_${parameter._1}_${parameter._2}")
+                        model = LogisticRegressionModel.load(sc, s"model/logistic_regression_${categoriesSize}_${parameter._1}_${parameter._2}")
         }
 
         model
@@ -263,7 +199,8 @@ object Main extends java.io.Serializable {
         var hashingTF: HashingTF = null
         categoryIndex match {
             case 0 => hashingTF = new HashingTF()
-            case 1 => hashingTF = new HashingTF(1024 * 100)
+//            case 1 => hashingTF = new HashingTF(1024 * 100)
+            case 1 => hashingTF = new HashingTF()
             case 2 => hashingTF = new HashingTF(1024 * 60)
         }
         // 1 kategoria Regression
@@ -380,7 +317,6 @@ object Main extends java.io.Serializable {
             var bestClass = 0
             var maxMargin = 0.0
             val withBias = dataMatrix.size + 1 == dataWithBiasSize
-            val classProbabilities: Array[Double] = new Array[Double](model.numClasses)
             (0 until model.numClasses - 1).foreach { i =>
                 var margin = 0.0
                 dataMatrix.foreachActive { (index, value) =>
@@ -394,10 +330,8 @@ object Main extends java.io.Serializable {
                     maxMargin = margin
                     bestClass = i + 1
                 }
-                classProbabilities(i + 1) = 1.0 / (1.0 + Math.exp(-(maxMargin - margin)))
             }
-
-            (bestClass, classProbabilities(bestClass))
+            (bestClass.toDouble, 1.0 / (1.0 + Math.exp(-maxMargin)))
         }
     }
 }

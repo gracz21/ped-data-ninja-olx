@@ -1,10 +1,7 @@
-import java.text.SimpleDateFormat
 import java.util
-import java.util.Date
 
 import org.apache.log4j.{Level, Logger}
 import org.apache.spark.mllib.classification._
-import org.apache.spark.mllib.evaluation.MulticlassMetrics
 import org.apache.spark.mllib.feature.{HashingTF, IDF}
 import org.apache.spark.mllib.linalg.{DenseVector, Vector, SparseVector => SV}
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -13,11 +10,10 @@ import org.apache.spark.sql.SparkSession
 import pl.sgjp.morfeusz.{Morfeusz, MorfeuszUsage, MorphInterpretation}
 
 import scala.collection.{JavaConversions, Map, mutable}
-import scalax.io.{Output, Resource}
+
+case class AdvertisementCompetition(id: Long, title: String, category: Long)
 
 object MainCompetition extends java.io.Serializable {
-    val output: Output = Resource.fromFile("result_" + new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss-SSS").format(new Date()))
-
     //    disableLogging()
 
     val sparkSession = SparkSession.builder
@@ -51,8 +47,6 @@ object MainCompetition extends java.io.Serializable {
         val training = sc.textFile("data/training.[0-9]*.tsv")
         val test = sc.textFile("data/test.[0-9]*.tsv")
 
-        val testaa = test.first()
-
         val categoriesFile = sc.textFile("data/categories.tsv")
         val categoriesHierarchyMap = categoriesFile
                 .zipWithIndex().filter((tuple: (String, Long)) => tuple._2 > 1)
@@ -71,44 +65,28 @@ object MainCompetition extends java.io.Serializable {
                 .zipWithIndex
                 .toMap
 
-        val modelCategoriesMap = Map(
-            0 -> createCategoryMap(training, 0),
-            1 -> createCategoryMap(training, 1),
-            2 -> createCategoryMap(training, 2)
-        )
+        val modelCategoriesMap = createCategoryMap(training, 1)
+
         val convertedTraining = training
                 .map(string => string.split("\t"))
-                .filter(stringArray => stringArray.length == 7)
-                .filter(stringArray => !stringArray(5).isEmpty) // 4
-                .map(stringArray =>
-            Advertisement(
-                stringArray(0).toLong,
-                stringArray(1),
-                Seq(
-                    modelCategoriesMap(0)(stringArray(4).toInt),
-                    modelCategoriesMap(1)(stringArray(5).toInt),
-                    modelCategoriesMap(2)(stringArray(6).toInt)
-                )
-            )
-        )
+                //                .filter(stringArray => stringArray.length == 7)
+                .filter(stringArray => !stringArray(5).isEmpty)
+                .map(stringArray => AdvertisementCompetition(stringArray(0).toLong, stringArray(1), modelCategoriesMap(stringArray(5).toInt)))
+
         val convertedTest = test
                 .map(string => string.split("\t"))
-                .map(stringArray =>
-                    Advertisement(
-                        stringArray(0).toLong,
-                        stringArray(1),
-                        Seq(0, 0, 0)
-                    )
-                )
+                .map(stringArray => AdvertisementCompetition(stringArray(0).toLong, stringArray(1), -1))
 
-        executeForAllCategories(convertedTraining, convertedTest, allCategoriesMap, modelCategoriesMap, errorMatrix)
+        val Array(training1, test1) = convertedTraining.randomSplit(Array(0.6, 0.4), 44)
+        //        executeForAllCategories(convertedTraining, convertedTest, allCategoriesMap, modelCategoriesMap, errorMatrix)
+        executeForAllCategories(training1, test1, allCategoriesMap, modelCategoriesMap, errorMatrix)
     }
 
     private def createCategoryMap(data: RDD[String], category: Int) = {
         data
                 .map(string => string.split("\t"))
-                .filter(stringArray => stringArray.length == 7)
-                .filter(stringArray => !stringArray(4 + category).isEmpty)
+                //                .filter(stringArray => stringArray.length == 7)
+                .filter(stringArray => !stringArray(5).isEmpty)
                 .map(stringArray => stringArray(4 + category).toInt)
                 .distinct()
                 .zipWithIndex()
@@ -183,25 +161,30 @@ object MainCompetition extends java.io.Serializable {
         errorMatrix
     }
 
-    private def executeForAllCategories(training: RDD[Advertisement], test: RDD[Advertisement], allCategoriesMap: Map[Int, Int], modelCategoriesMap: Map[Int, Map[Int, Long]], errorMatrix: Array[Array[Int]]) = {
-        val categoryIndex = 2
+    private def executeForAllCategories(training: RDD[AdvertisementCompetition], test: RDD[AdvertisementCompetition], allCategoriesMap: Map[Int, Int], modelCategoriesMap: Map[Int, Long], errorMatrix: Array[Array[Int]]) = {
+        val model = execute(training, 1, modelCategoriesMap.size, tfidf = true)
+        val testDataSet = createLabeledPointDataSet(test, 1, tfidf = true)
 
-        val model = execute(training, categoryIndex, modelCategoriesMap(categoryIndex).size, tfidf = true)
-        val testDataSet = createLabeledPointDataSet(test, categoryIndex, tfidf = true)
+        //        val zipped = test.zip(testDataSet)
+        //
+        //        val evaluatedTest = zipped.map(item => {
+        //            (item._1.id, modelCategoriesMap.map(_.swap).get(model.predict(item._2.features).toInt).get)
+        //        })
+        //
+        //        evaluatedTest.foreach(item => {
+        //            println(s"${item._1}\t${item._2}")
+        //        })
 
         val zipped = test.zip(testDataSet)
+        val mapped = zipped.map(zip => (zip._1.id, model.predict(zip._2.features), zip._2.label))
 
-        val evaluatedTest = zipped.map(item => {
-            (item._1.id, getCategoryIndex(modelCategoriesMap, categoryIndex, model.predict(item._2.features).toInt))
-        })
+        val errorSum = mapped.filter(x => x._2 != x._3)
+                .map(tuple =>
+                    errorMatrix(allCategoriesMap(modelCategoriesMap.map(_.swap).get(tuple._3.toInt).get))(allCategoriesMap(modelCategoriesMap.map(_.swap).get(tuple._2.toInt).get))
+                )
+                .sum() / test.count()
 
-        evaluatedTest.foreach(item => {
-            println(s"${item._1}\t${item._2}")
-        })
-    }
-
-    private def getCategoryIndex(modelCategoriesMap: Map[Int, Map[Int, Long]], categoryIndex: Int, category: Double) = {
-        modelCategoriesMap(categoryIndex).map(_.swap).get(category.toInt).get
+        println(errorSum)
     }
 
     def calculateAccuracy(rdd: RDD[(Long, Double, Double)]): Double = {
@@ -209,7 +192,7 @@ object MainCompetition extends java.io.Serializable {
         accuracy
     }
 
-    private def execute(training: RDD[Advertisement], categoryIndex: Int, categoriesSize: Int, tfidf: Boolean) = {
+    private def execute(training: RDD[AdvertisementCompetition], categoryIndex: Int, categoriesSize: Int, tfidf: Boolean) = {
         val trainDataSet = createLabeledPointDataSet(training, categoryIndex, tfidf)
 
         val model = logisticRegression(trainDataSet, categoriesSize, (10, 0.01))
@@ -225,29 +208,17 @@ object MainCompetition extends java.io.Serializable {
             modelSettings.optimizer.setNumIterations(parameter._1)
             modelSettings.optimizer.setRegParam(parameter._2)
 
-//            model = modelSettings.run(trainDataSet)
-//            model.save(sc, s"model/logistic_regression_${categoriesSize}_${parameter._1}_${parameter._2}")
-            model = LogisticRegressionModel.load(sc, s"model/logistic_regression_${categoriesSize}_${parameter._1}_${parameter._2}")
+            model = modelSettings.run(trainDataSet)
+            model.save(sc, s"model/logistic_regression_${categoriesSize}_${parameter._1}_${parameter._2}")
+//            model = LogisticRegressionModel.load(sc, s"model/logistic_regression_${categoriesSize}_${parameter._1}_${parameter._2}")
         }
 
         model
     }
 
-    private def saveMetricsToFile(model: ClassificationModel, testDataSet: RDD[LabeledPoint]) = {
-        val predictionAndLabel = testDataSet.map(p => (model.predict(p.features), p.label))
-        val metrics = new MulticlassMetrics(predictionAndLabel)
-
-        output.write(metrics.accuracy + ";"
-                + metrics.weightedFMeasure + ";"
-                + metrics.weightedPrecision + ";"
-                + metrics.weightedRecall + ";"
-                + metrics.weightedTruePositiveRate + ";"
-                + metrics.weightedFalsePositiveRate)
-    }
-
-    def createLabeledPointDataSet(dataSet: RDD[Advertisement], categoryIndex: Int, tfidf: Boolean): RDD[LabeledPoint] = {
+    def createLabeledPointDataSet(dataSet: RDD[AdvertisementCompetition], categoryIndex: Int, tfidf: Boolean): RDD[LabeledPoint] = {
         val categories = dataSet
-                .map(advertisement => advertisement.categories(categoryIndex))
+                .map(advertisement => advertisement.category)
 
         val tokens = dataSet
                 .map(advertisement => processTitle(advertisement.title))
