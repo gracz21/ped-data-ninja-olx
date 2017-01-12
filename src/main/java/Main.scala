@@ -82,20 +82,46 @@ object Main extends java.io.Serializable {
       .map(row => (L1Cat(row._1), row._2._1.map(row => row._1).zipWithIndex.toMap))
       .collectAsMap()
 
+    val L3categories = scala.collection.mutable.Map[(Long, Long), Map[Int, Long]]()
+
+    L2Categories
+      .foreach(row => row._2.foreach(keyPair => {
+        L3categories.put(
+          (row._1, keyPair._2),
+          categiresRDD
+            .filter(t => t._2 == keyPair._1)
+            .map(t => t._1)
+            .zipWithIndex()
+            .collectAsMap()
+        )
+      }))
+
 
     val convertedData = data
       .map(string => string.split("\t"))
-      .filter(row => row.size >= 6)
-      .map(stringArray =>
+      .map(stringArray => {
+        var cat1 = -1l
+        if (stringArray.length >= 5)
+          cat1 = L1Cat(stringArray(4).toInt)
+
+        var cat2 = -1l
+        if (stringArray.length >= 6)
+          cat2 = L2Categories(cat1)(stringArray(5).toInt)
+
+        var cat3 = -1l
+        if (stringArray.length >= 7)
+          cat3 = L3categories((cat1, cat2))(stringArray(6).toInt)
+
         Advertisement(
           stringArray(0).toLong,
           stringArray(1),
           Seq(
-            L1Cat(stringArray(4).toInt),
-            L2Categories(L1Cat(stringArray(4).toInt))(stringArray(5).toInt),
-            0
+            cat1,
+            cat2,
+            cat3
           )
         )
+      }
       )
 
     val tests = sc.textFile("data/test.[0-9]*.tsv")
@@ -110,9 +136,9 @@ object Main extends java.io.Serializable {
 
     createLabeledPointDataSet(convertedData.union(tests), 0, true)
 
-    val models = executeForAllCategories(convertedData, L1Cat, L2Categories, tests)
+    val models = executeForAllCategories(convertedData, L1Cat, L2Categories, L3categories)
 
-    val test = predict(tests, convertedData, models._1, models._2, models._3, true)
+    val test = predict(tests, models._1, models._2, models._3, true)
 
     test
       .collect()
@@ -123,11 +149,13 @@ object Main extends java.io.Serializable {
           category = L1Cat.filter(r => r._2 == row._2._2).head._1
         else if (row._3 == 2)
           category = L2Categories(row._2._2).filter(r => r._2 == row._2._3).head._1
+        else if (row._3 == 3)
+          category = L3categories((row._2._2, row._2._3)).filter(r => r._2 == row._2._4).head._1
 
         testsr.write(s"${row._1.id}\t$category\n")
       })
 
-    val test2 = predict(convertedData, tests, models._1, models._2, models._3, false)
+    val test2 = predict(convertedData, models._1, models._2, models._3, true)
     output.write(calculateAccuracy(test2) + "\n")
   }
 
@@ -142,52 +170,82 @@ object Main extends java.io.Serializable {
       .collectAsMap()
   }
 
-  private def executeForAllCategories(dataSet: RDD[Advertisement], L1: Map[Int, Long], L2: Map[Long, Map[Int, Int]], tests: RDD[Advertisement]) = {
+  private def executeForAllCategories(dataSet: RDD[Advertisement], L1: Map[Int, Long], L2: Map[Long, Map[Int, Int]], L3: Map[(Long, Long), Map[Int, Long]]) = {
     val modelL1Map = scala.collection.mutable.Map[Long, LogisticRegressionModel]()
-    val modelL2Map = scala.collection.mutable.Map[Long, LogisticRegressionModel]()
+    val modelL2Map = scala.collection.mutable.Map[(Long, Long), LogisticRegressionModel]()
 
-    val model = execute(dataSet, 0, L1.size, tfidf = true, 0, tests)
+    val model = execute(dataSet, 0, L1.size, tfidf = true, 0)
 
     for (category <- L1) {
 
       val L2set = dataSet
-        .filter(row => row.categories(0) == category._2)
+        .filter(row => row.categories(0) == category._2 && row.categories(1) != -1)
 
-      modelL1Map.put(
-        category._2,
-        execute(L2set, 1, L2(category._2).size, tfidf = true, category._1, tests)
-      )
+      val size = L2(category._2).size
+
+      if (size != 0 && L2set.count() != 0)
+        modelL1Map.put(
+          category._2,
+          execute(L2set, 1, size, tfidf = true, category._1)
+        )
+    }
+
+    for (category <- L2.flatMap(t => t._2.map(r => (t._1, r._2, r._1)))) {
+
+      val L3set = dataSet
+        .filter(row => row.categories(0) == category._1 && row.categories(1) == category._2.toLong && row.categories(2) != -1)
+
+      val size = L3((category._1, category._2.toLong)).size
+
+      if (size != 0 && L3set.count() != 0) {
+        modelL2Map.put(
+          (category._1, category._2.toLong),
+          execute(L3set, 2, size, tfidf = true, category._3)
+        )
+      }
     }
 
     (model, modelL1Map, modelL2Map)
   }
 
-  private def predict(dataSet: RDD[Advertisement], tests: RDD[Advertisement], model: LogisticRegressionModel, L1Models: Map[Long, LogisticRegressionModel], L2Models: Map[Long, LogisticRegressionModel], test: Boolean) = {
+  private def predict(dataSet: RDD[Advertisement], model: LogisticRegressionModel, L1Models: Map[Long, LogisticRegressionModel], L2Models: Map[(Long, Long), LogisticRegressionModel], test: Boolean) = {
     val labeled = dataSet.zip(createLabeledPointDataSet(dataSet, 0, tfidf = true))
     val labeledL1 = dataSet.zip(createLabeledPointDataSet(dataSet, 1, tfidf = true))
+    val labeledL2 = dataSet.zip(createLabeledPointDataSet(dataSet, 2, tfidf = true))
 
     var conc = labeled
       .join(labeledL1)
+      .join(labeledL2)
 
     val L1predictions = conc
-      .map(row => (row, ClassificationUtility.predictPoint(row._2._1.features, model)))
+      .map(row => (row, ClassificationUtility.predictPoint(row._2._1._1.features, model)))
 
     val L2predictions = L1predictions
       .map(row => {
-        if (row._2._2 < 0.9)
+        if (row._2._2 < 0.7 || !L1Models.contains(row._2._1.toLong))
           (row._1, row._2, (-1.toDouble, -1.toDouble))
         else
-          (row._1, row._2, ClassificationUtility.predictPoint(row._1._2._2.features, L1Models(row._2._1.toLong)))
+          (row._1, row._2, ClassificationUtility.predictPoint(row._1._2._1._2.features, L1Models(row._2._1.toLong)))
       })
 
-    L2predictions
+    val L3predictions = L2predictions
+      .map(row => {
+        if (row._3._2 < 0.8 || !L2Models.contains((row._2._1.toLong, row._3._1.toLong)))
+          (row._1, row._2, row._3, (-1.toDouble, -1.toDouble))
+        else
+          (row._1, row._2, row._3, ClassificationUtility.predictPoint(row._1._2._2.features, L2Models((row._2._1.toLong, row._3._1.toLong))))
+      })
+
+    L3predictions
       .map(row => {
         if (row._3._1 == -1)
           (row._1._1, (0.toLong, -1.toLong, -1.toLong, -1.toLong), 0)
-        else if (row._3._2 < 0.9)
+        else if (row._3._1 == -1)
           (row._1._1, (0.toLong, row._2._1.toLong, -1.toLong, -1.toLong), 1)
-        else
+        else if (row._4._2 < 0.9)
           (row._1._1, (0.toLong, row._2._1.toLong, row._3._1.toLong, -1.toLong), 2)
+        else
+          (row._1._1, (0.toLong, row._2._1.toLong, row._3._1.toLong, row._4._1.toLong), 3)
       })
   }
 
@@ -207,7 +265,7 @@ object Main extends java.io.Serializable {
     accuracy
   }
 
-  private def execute(dataSet: RDD[Advertisement], categoryIndex: Int, categoriesSize: Int, tfidf: Boolean, category: Int, tests: RDD[Advertisement]) = {
+  private def execute(dataSet: RDD[Advertisement], categoryIndex: Int, categoriesSize: Int, tfidf: Boolean, category: Int) = {
 
     var model: LogisticRegressionModel = null
     val parameter = (10, 0.01)
@@ -215,15 +273,19 @@ object Main extends java.io.Serializable {
 
     if (!Files.exists(Paths.get(path))) {
       val labeledDataSet = createLabeledPointDataSet(dataSet, categoryIndex, tfidf)
-      val labeledTrainDataSet = labeledDataSet/*dataSet.keyBy(r => r.id)
-        .join(labeledDataSet.keyBy(r => r._4))
-        .map(r => {
-          categoryIndex match {
-            case 0 => r._2._2._1
-            case 1 => r._2._2._2
-            case 2 => r._2._2._3
-          }
-        })*/
+      val labeledTrainDataSet = labeledDataSet
+      /*dataSet.keyBy(r => r.id)
+              .join(labeledDataSet.keyBy(r => r._4))
+              .map(r => {
+                categoryIndex match {
+                  case 0 => r._2._2._1
+                  case 1 => r._2._2._2
+                  case 2 => r._2._2._3
+                }
+              })*/
+
+
+      val t = labeledTrainDataSet.collect()
 
       output.write(path + " " + time {
         val modelSettings = new LogisticRegressionWithLBFGS()
@@ -288,7 +350,6 @@ object Main extends java.io.Serializable {
 
     labelPointDataSet
   }
-
 
 
   /*var points: RDD[(LabeledPoint, LabeledPoint, LabeledPoint, Long)] = null
