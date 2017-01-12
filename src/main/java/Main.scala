@@ -159,6 +159,43 @@ object Main extends java.io.Serializable {
     output.write(calculateAccuracy(test2) + "\n")
   }
 
+  private def createErrorMatrix(categoriesHierarchyMap: Map[Int, Int], categories: Array[Int]): Array[Array[Int]] = {
+    val errorMatrix = Array.ofDim[Int](categoriesHierarchyMap.size, categoriesHierarchyMap.size)
+
+    categories.foreach(
+      category => {
+        val idx1 = categories.indexOf(category)
+        errorMatrix(idx1)(idx1) = 0
+        var path = Array.empty[Int]
+        var currentCategory = category
+
+        //Generate path from "predicted" category to root
+        path = path :+ currentCategory
+        while (categoriesHierarchyMap(currentCategory) != 0) {
+          path = path :+ currentCategory
+          currentCategory = categoriesHierarchyMap(currentCategory)
+        }
+        path = path :+ 0
+
+        //Find start of common part with path from "predicted" category to root
+        categories.filter(int => int != category).foreach(
+          correctCategory => {
+            val idx2 = categories.indexOf(correctCategory)
+            var errorValue = 0
+            var currentCategory2 = correctCategory
+            while (!path.contains(currentCategory2)) {
+              errorValue += 1
+              currentCategory2 = categoriesHierarchyMap(currentCategory2)
+            }
+            errorValue += path.indexOf(currentCategory2) * 2
+            errorMatrix(idx1)(idx2) = errorValue
+          }
+        )
+      }
+    )
+    errorMatrix
+  }
+
   private def createCategoryMap(data: RDD[String], category: Int, cat: Int) = {
     data
       .map(string => string.split("\t"))
